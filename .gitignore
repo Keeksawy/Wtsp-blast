@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# User data — never commit
+data/
+"WA Outreach Data"/
+
+# WhatsApp session profiles
+data/sessions/
+
+# PyInstaller build artefacts
+build/WA_Outreach_mac/
+build/WA_Outreach_win/
+dist/
+*.spec.bak
+
+# macOS
+.DS_Store
+*.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Test cache
+.pytest_cache/
+*.pytest_cache.zip
+
+# Large binaries already in repo root (keep out of future commits)
+cloudflared
+cloudflared.exe

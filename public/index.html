@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WhatsApp Outreach — Driven Properties</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ── Login overlay ───────────────────────────────────────────────── -->
+<div id="login-overlay" style="display:flex">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="lmark">DP</div>
+      <div class="lname">
+        <strong>Driven Properties</strong>
+        <span>WhatsApp Outreach</span>
+      </div>
+    </div>
+
+    <div class="auth-tabs">
+      <button id="tab-login" class="active" onclick="switchAuthTab('login')">Sign in</button>
+      <button id="tab-register" onclick="switchAuthTab('register')">Create account</button>
+    </div>
+
+    <div id="panel-login">
+      <input id="login-email" type="email" placeholder="you@drivenproperties.com" />
+      <input id="login-password" type="password" placeholder="Password" />
+      <button class="submit-btn" onclick="submitLogin()">Sign in</button>
+    </div>
+
+    <div id="panel-register" hidden>
+      <p style="color:var(--text-muted);font-size:12.5px;margin:0 0 12px">Only @drivenproperties.com addresses are accepted.</p>
+      <input id="reg-email" type="email" placeholder="you@drivenproperties.com" />
+      <input id="reg-password" type="password" placeholder="Password (min 8 characters)" />
+      <input id="reg-password2" type="password" placeholder="Confirm password" />
+      <button class="submit-btn" onclick="submitRegister()">Create account</button>
+    </div>
+
+    <p id="login-error"></p>
+  </div>
+</div>
+
+<!-- ── Media-issue modal (shown before campaign launch) ─────────────── -->
+<div id="media-issue-modal" style="display:none;position:fixed;inset:0;background:rgba(15,34,64,.55);align-items:center;justify-content:center;z-index:1000">
+  <div class="modal-card" style="max-width:480px">
+    <h3 style="margin:0 0 10px">⚠️ Media file issue</h3>
+    <p id="media-issue-body" style="font-size:13px;color:var(--text-muted);margin:0 0 16px"></p>
+    <div class="modal-btns">
+      <button onclick="startCampaignNoImages()">Send without images</button>
+      <button class="cancel" onclick="document.getElementById('media-issue-modal').style.display='none'">Cancel — fix first</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Change-password modal ────────────────────────────────────────── -->
+<div id="change-pw-modal" style="display:none;position:fixed;inset:0;background:rgba(15,34,64,.55);align-items:center;justify-content:center;z-index:1000">
+  <div class="modal-card">
+    <h3>Change password</h3>
+    <input id="cpw-current" type="password" placeholder="Current password" />
+    <input id="cpw-new" type="password" placeholder="New password (min 8 characters)" />
+    <input id="cpw-confirm" type="password" placeholder="Confirm new password" />
+    <div class="modal-btns">
+      <button onclick="submitChangePassword()">Save</button>
+      <button class="cancel" onclick="document.getElementById('change-pw-modal').style.display='none'">Cancel</button>
+    </div>
+    <p id="cpw-error"></p>
+  </div>
+</div>
+
+<!-- ── App shell (hidden until login) ──────────────────────────────── -->
+<div id="app" hidden>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="sidebar-logo-mark">DP</div>
+      <div class="sidebar-logo-text">
+        <strong>Driven</strong>
+        <span>WhatsApp Outreach</span>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button class="nav-item active" id="nav-numbers" onclick="navigate('numbers')">
+        <span class="nav-icon">📱</span>
+        <span class="nav-label">Numbers</span>
+      </button>
+      <button class="nav-item" id="nav-contacts" onclick="navigate('contacts')">
+        <span class="nav-icon">👥</span>
+        <span class="nav-label">Contacts</span>
+      </button>
+      <button class="nav-item" id="nav-campaign" onclick="navigate('campaign')">
+        <span class="nav-icon">🚀</span>
+        <span class="nav-label">Campaign</span>
+      </button>
+      <button class="nav-item" id="nav-inbox" onclick="navigate('inbox')">
+        <span class="nav-icon">💬</span>
+        <span class="nav-label">Inbox</span>
+        <span class="nav-badge" id="badge-inbox" hidden>0</span>
+      </button>
+      <button class="nav-item" id="nav-settings" onclick="navigate('settings')">
+        <span class="nav-icon">⚙️</span>
+        <span class="nav-label">Settings</span>
+      </button>
+      <button class="nav-item nav-admin-item" id="nav-admin" onclick="navigate('admin')" hidden>
+        <span class="nav-icon">🔐</span>
+        <span class="nav-label">Admin</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="user-avatar" id="user-avatar">U</div>
+      <div class="user-info">
+        <div class="user-email" id="user-email">user@example.com</div>
+        <div class="user-links">
+          <a href="#" onclick="document.getElementById('change-pw-modal').style.display='flex'; return false">Change password</a>
+          <span class="sep">·</span>
+          <a href="#" onclick="logout(); return false">Sign out</a>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main area -->
+  <div class="main-area">
+
+    <!-- Numbers page -->
+    <div class="page active" id="page-numbers">
+      <div class="page-header">
+        <div class="page-header-left">
+          <h1>WhatsApp Numbers</h1>
+          <p class="page-subtitle">Manage your connected WhatsApp numbers and monitor their status</p>
+        </div>
+        <button class="btn-primary" onclick="showAddNumber()">+ Add Number</button>
+      </div>
+      <div class="page-body">
+        <div id="add-number-form" class="card" style="display:none;margin-bottom:16px">
+          <h3 style="margin:0 0 12px">Add a new number</h3>
+          <div class="form-row">
+            <input id="new-number-label" placeholder="Label, e.g. Team A — Outreach" style="flex:1;min-width:200px" />
+            <button class="btn-primary" onclick="addNumber()">Add &amp; Generate QR</button>
+            <button class="btn-ghost" onclick="hideAddNumber()">Cancel</button>
+          </div>
+        </div>
+        <div id="numbers-list"></div>
+      </div>
+    </div>
+
+    <!-- Contacts page -->
+    <div class="page" id="page-contacts">
+      <div class="page-header">
+        <div class="page-header-left">
+          <h1>Contacts <span class="count-badge" id="contacts-count"></span></h1>
+          <p class="page-subtitle">All imported owner contacts and their outreach status</p>
+        </div>
+        <div class="header-actions">
+          <button class="btn-ghost" onclick="clearInvalidContacts()">Remove Invalid</button>
+          <button class="btn-danger" onclick="clearAllContacts()">Clear All</button>
+        </div>
+      </div>
+      <div class="page-body">
+        <div class="card table-card">
+          <div id="contacts-table"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Campaign page -->
+    <div class="page" id="page-campaign">
+      <div class="page-header">
+        <div class="page-header-left">
+          <h1>Campaign</h1>
+          <p class="page-subtitle">Import contacts, assign to numbers and launch outreach</p>
+        </div>
+      </div>
+      <div class="page-body">
+
+        <!-- Import section -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header">
+            <h2 class="card-title">Import Contacts</h2>
+            <a href="/contact_template.xlsx" download class="btn-ghost btn-sm">⬇ Download Template</a>
+          </div>
+          <p class="hint">Upload an Excel or CSV file. Required columns: <strong>Owner Name</strong>, <strong>Mobile Number</strong>, <strong>Unit Number</strong>. Optional: <strong>Campaign Name</strong>, <strong>Sales Agent ID</strong>.</p>
+
+          <div id="upload-zone" class="upload-zone"
+            ondragover="event.preventDefault(); document.getElementById('upload-zone').classList.add('drag-over')"
+            ondragleave="document.getElementById('upload-zone').classList.remove('drag-over')"
+            ondrop="handleDrop(event)"
+            onclick="document.getElementById('import-file').click()">
+            <div class="upload-icon">📂</div>
+            <div class="upload-text">Drag &amp; drop your file here, or click to browse</div>
+            <div class="upload-sub">Supports .xlsx, .xls, .csv</div>
+            <input type="file" id="import-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="importFile()" />
+          </div>
+
+          <div class="form-row" style="margin-top:12px">
+            <input id="campaign-name" placeholder="Campaign name (optional)" style="flex:1" />
+            <button class="btn-primary" onclick="importFile()">Import File</button>
+          </div>
+          <div id="import-result"></div>
+        </div>
+
+        <!-- Launch section -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header">
+            <h2 class="card-title">Launch</h2>
+          </div>
+          <p class="hint">Queues all imported contacts and rotates sends evenly across every connected number. Each contact gets a randomised template variant (A–E) and greeting so messages look natural and avoid spam detection.</p>
+          <div class="form-row" style="align-items:center">
+            <input id="launch-campaign-name" placeholder="Filter by campaign name (optional — blank = all unqueued)" style="flex:1;min-width:220px" />
+            <button class="btn-primary" onclick="startCampaign()">▶ Start Sending</button>
+            <button class="btn-danger" onclick="stopCampaign()">■ Stop All</button>
+          </div>
+          <div id="assign-result"></div>
+        </div>
+
+        <!-- Dashboard section -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Dashboard</h2>
+          </div>
+          <div id="dashboard"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Inbox page -->
+    <div class="page inbox-page" id="page-inbox">
+      <div class="inbox-left">
+        <div class="inbox-left-header">
+          <h2>Inbox</h2>
+          <p class="hint" style="margin:0">Customer replies</p>
+        </div>
+        <div id="inbox-conversations"></div>
+      </div>
+      <div class="inbox-thread" id="inbox-thread">
+        <div class="inbox-empty-state">
+          <div class="inbox-empty-icon">💬</div>
+          <p>Select a conversation to read the thread and reply.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings page -->
+    <div class="page" id="page-settings">
+      <div class="page-header">
+        <div class="page-header-left">
+          <h1>Settings</h1>
+          <p class="page-subtitle">Configure sending delay, CRM integration and message templates</p>
+        </div>
+        <button class="btn-primary" onclick="saveSettings()">Save Settings</button>
+      </div>
+      <div class="page-body">
+
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header">
+            <h2 class="card-title">Sending Delay</h2>
+          </div>
+          <p class="hint">Applies to every send in strict rotation across active numbers. Per-number daily caps are set on each number.</p>
+          <div class="form-row" style="align-items:center">
+            <label class="field-label" style="white-space:nowrap">
+              Delay between sends (seconds):&nbsp;
+              min <input id="delay-min" type="number" min="5" style="width:72px;display:inline-block">
+              &nbsp;–&nbsp;
+              max <input id="delay-max" type="number" min="5" style="width:72px;display:inline-block">
+            </label>
+            <button class="btn-secondary" onclick="saveSettings()">Save</button>
+          </div>
+          <div id="settings-result"></div>
+        </div>
+
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header">
+            <h2 class="card-title">CRM Webhook</h2>
+          </div>
+          <p class="hint">Receives a lead payload when a contact replies with a SELL or RENT keyword. Leave blank to disable.</p>
+          <div class="form-row">
+            <input id="crm-webhook-url" type="url" placeholder="https://your-crm.com/webhook/lead" style="flex:1" />
+            <button class="btn-secondary" onclick="saveSettings()">Save</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Message Templates</h2>
+          </div>
+          <div id="template-editor"></div>
+          <div class="form-row" style="margin-top:14px">
+            <button class="btn-primary" onclick="saveTemplates()">Save Templates</button>
+          </div>
+          <div id="templates-result"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Admin page -->
+    <div class="page" id="page-admin">
+      <div class="page-header">
+        <div class="page-header-left">
+          <h1>User Management</h1>
+          <p class="page-subtitle">Admin only — manage user accounts and permissions</p>
+        </div>
+      </div>
+      <div class="page-body">
+
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header">
+            <h2 class="card-title">All Users</h2>
+          </div>
+          <div id="users-list"></div>
+        </div>
+
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header">
+            <h2 class="card-title">Add New User</h2>
+          </div>
+          <p class="hint">The user can change their password after first login.</p>
+          <div class="form-row">
+            <input id="new-user-email" type="email" placeholder="colleague@drivenproperties.com" style="flex:2;min-width:200px" />
+            <input id="new-user-password" type="password" placeholder="Temporary password (min 8 chars)" style="flex:2;min-width:180px" />
+            <select id="new-user-role" class="select-input">
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </select>
+            <button class="btn-primary" onclick="createUser()">Add User</button>
+          </div>
+          <div id="user-result"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Reset a User's Password</h2>
+          </div>
+          <div class="form-row">
+            <select id="reset-user-select" class="select-input" style="flex:2"><option value="">— select user —</option></select>
+            <input id="reset-user-password" type="password" placeholder="New password (min 8 chars)" style="flex:2;min-width:180px" />
+            <button class="btn-secondary" onclick="adminResetPassword()">Reset Password</button>
+          </div>
+          <div id="reset-result"></div>
+        </div>
+
+      </div>
+    </div>
+
+  </div><!-- /main-area -->
+</div><!-- /app -->
+
+<script src="app.js"></script>
+</body>
+</html>

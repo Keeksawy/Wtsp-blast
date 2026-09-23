@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>WhatsApp Owner Outreach</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>WhatsApp Owner Outreach</h1>
+  <p class="subtitle">Multi-number sending with built-in restriction-risk controls</p>
+</header>
+
+<main>
+  <section class="card">
+    <h2>1. WhatsApp Numbers</h2>
+    <div id="numbers-list"></div>
+    <div class="row">
+      <input id="new-number-label" placeholder="Label, e.g. Team A - Outreach" />
+      <button onclick="addNumber()">+ Add Number</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>2. Import Owners</h2>
+    <p class="hint">Excel/CSV with columns: Owner Name, Mobile Number, Unit Number</p>
+    <div class="row">
+      <input type="file" id="import-file" accept=".xlsx,.xls,.csv" />
+      <input id="campaign-name" placeholder="Campaign name (optional)" />
+      <button onclick="importFile()">Import</button>
+    </div>
+    <div id="import-result"></div>
+  </section>
+
+  <section class="card">
+    <h2>3. Assign &amp; Launch Campaign</h2>
+    <p class="hint">Assigns every unassigned, eligible owner to one of the selected numbers (round robin) and locks that assignment.</p>
+    <div id="number-checkboxes"></div>
+    <div class="row">
+      <input id="assign-campaign-name" placeholder="Campaign name to assign (blank = all unassigned)" />
+      <button onclick="assignContacts()">Assign Contacts</button>
+      <button onclick="startCampaign()">Start Sending</button>
+      <button class="danger" onclick="stopCampaign()">Stop All Sending</button>
+    </div>
+    <div id="assign-result"></div>
+  </section>
+
+  <section class="card">
+    <h2>4. Dashboard</h2>
+    <div id="dashboard"></div>
+  </section>
+
+  <section class="card">
+    <h2>5. Contacts</h2>
+    <div id="contacts-table"></div>
+  </section>
+
+  <section class="card">
+    <h2>6. Inbox (recent replies)</h2>
+    <div id="inbox"></div>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

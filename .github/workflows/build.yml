@@ -1,0 +1,116 @@
+name: Build desktop apps
+
+on:
+  push:
+    tags:
+      - "v*"          # trigger on version tags: git tag v1.0.0 && git push --tags
+  workflow_dispatch:  # also allows manual trigger from GitHub UI
+
+jobs:
+  # ── Mac build ────────────────────────────────────────────────────────────
+  build-mac:
+    runs-on: macos-14       # Apple Silicon runner (arm64)
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install "pywebview>=4.3" pyinstaller
+
+      - name: Generate icons
+        run: python assets/make_icon.py
+
+      - name: Build .app
+        run: pyinstaller build/WA_Outreach_mac.spec --clean --noconfirm
+
+      - name: Zip the app
+        run: |
+          cd dist
+          zip -r --symlinks "WA_Outreach_Mac.zip" "WA Outreach.app"
+          ls -lh WA_Outreach_Mac.zip
+
+      - name: Upload Mac artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WA-Outreach-Mac
+          path: dist/WA_Outreach_Mac.zip
+          retention-days: 30
+
+  # ── Windows build ─────────────────────────────────────────────────────────
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install "pywebview>=4.3" "pythonnet>=3.0" pyinstaller
+
+      - name: Generate icons
+        run: python assets/make_icon.py
+
+      - name: Build .exe
+        run: pyinstaller build/WA_Outreach_win.spec --clean --noconfirm
+
+      - name: Zip output folder
+        run: |
+          cd dist
+          Compress-Archive -Path "WA Outreach" -DestinationPath "WA_Outreach_Windows.zip"
+        shell: powershell
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WA-Outreach-Windows
+          path: dist/WA_Outreach_Windows.zip
+          retention-days: 30
+
+  # ── GitHub Release (only on version tags) ────────────────────────────────
+  release:
+    needs: [build-mac, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "WA Outreach ${{ github.ref_name }}"
+          body: |
+            ## Install instructions
+
+            ### Mac
+            1. Download `WA_Outreach_Mac.zip` and unzip it
+            2. Move `WA Outreach.app` to your Applications folder
+            3. **First launch**: right-click the app → Open → click Open (Gatekeeper bypass — one time only)
+            4. On first run the app downloads Playwright Chromium (~150 MB) in the background
+
+            ### Windows
+            1. Download `WA_Outreach_Windows.zip` and unzip it anywhere
+            2. Run `WA Outreach.exe` inside the folder
+            3. **SmartScreen warning**: click "More info" → "Run anyway" (one time only)
+            4. On first run the app downloads Playwright Chromium (~150 MB) in the background
+
+            > **Note**: Both platforms require an internet connection on first launch to download the browser automation engine.
+          files: |
+            artifacts/WA-Outreach-Mac/WA_Outreach_Mac.zip
+            artifacts/WA-Outreach-Windows/WA_Outreach_Windows.zip
+          draft: false
+          prerelease: false

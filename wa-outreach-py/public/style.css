@@ -1,0 +1,28 @@
+:root { --navy:#1F3864; --gold:#9C7A3C; --light:#f2f2f2; --red:#b00020; --green:#2e7d32; }
+* { box-sizing: border-box; }
+body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background: #fafafa; color: #222; }
+header { background: var(--navy); color: white; padding: 20px 30px; }
+header h1 { margin: 0; font-size: 22px; }
+.subtitle { margin: 4px 0 0; opacity: .85; font-size: 13px; }
+main { max-width: 980px; margin: 20px auto; padding: 0 16px; }
+.card { background: white; border: 1px solid #e2e2e2; border-radius: 8px; padding: 18px 20px; margin-bottom: 18px; }
+.card h2 { margin-top: 0; font-size: 16px; color: var(--navy); border-bottom: 2px solid var(--navy); padding-bottom: 8px; }
+.hint { color: #666; font-size: 13px; margin-top: -6px; }
+.row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
+input[type=text], input:not([type]), input[type=file] { padding: 7px 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 13px; }
+button { background: var(--navy); color: white; border: none; padding: 8px 14px; border-radius: 5px; cursor: pointer; font-size: 13px; }
+button:hover { opacity: .9; }
+button.danger { background: var(--red); }
+table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
+th { background: var(--light); color: var(--navy); }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; color: white; }
+.badge.connected { background: var(--green); }
+.badge.paused, .badge.disconnected, .badge.auto_paused { background: var(--red); }
+.badge.awaiting_qr_scan, .badge.initializing { background: var(--gold); }
+.qr-box img { width: 140px; height: 140px; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px,1fr)); gap: 10px; margin-top: 10px; }
+.stat { background: var(--light); border-radius: 6px; padding: 10px; text-align: center; }
+.stat .num { font-size: 20px; font-weight: bold; color: var(--navy); }
+.stat .label { font-size: 11px; color: #666; }
+.number-row { border: 1px solid #eee; border-radius: 6px; padding: 10px; margin-bottom: 8px; display: flex; gap: 16px; align-items: center; }
