@@ -487,6 +487,22 @@ def delete_template_image(template_id):
     return jsonify({"ok": True})
 
 
+@app.route("/api/open-template-csv", methods=["GET"])
+def open_template_csv():
+    import subprocess, webbrowser
+    url = "https://raw.githubusercontent.com/Keeksawy/Wtsp-blast/main/public/contact_template.csv"
+    try:
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", url])
+        elif sys.platform == "win32":
+            subprocess.Popen(["cmd", "/c", "start", "", url], shell=False)
+        else:
+            webbrowser.open(url)
+    except Exception:
+        webbrowser.open(url)
+    return jsonify({"ok": True})
+
+
 @app.route("/api/templates/validate-images", methods=["GET"])
 def validate_template_images():
     """Pre-flight check called before campaign launch. Returns any templates whose
