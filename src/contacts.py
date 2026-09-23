@@ -28,12 +28,38 @@ def _map_row(headers, raw_row):
     return out
 
 
+def _is_header_row(row):
+    """Return True if at least one cell matches a known column alias."""
+    all_aliases = {alias for aliases in COLUMN_ALIASES.values() for alias in aliases}
+    return any(_normalize_header(cell) in all_aliases for cell in row if cell is not None)
+
+
 def parse_excel_buffer(file_bytes):
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
     sheet = wb[wb.sheetnames[0]]
-    rows_iter = sheet.iter_rows(values_only=True)
-    headers = next(rows_iter, [])
-    return [_map_row(headers, row) for row in rows_iter]
+    all_rows = list(sheet.iter_rows(values_only=True))
+
+    # Find the header row by scanning up to the first 10 rows.
+    # This skips title banners and description rows that sit above the actual headers.
+    header_idx = next(
+        (i for i, row in enumerate(all_rows[:10]) if _is_header_row(row)),
+        0,
+    )
+    headers = all_rows[header_idx]
+    # Skip the description/hint row that immediately follows the header in the template
+    # (it contains long instructional text rather than real data).
+    data_rows = all_rows[header_idx + 1:]
+    # Drop description/hint rows: any row whose mobile cell isn't digit-only
+    # (after stripping +, spaces, dashes) is not real data.
+    _PHONE_RE = re.compile(r"^[\+\d\s\-\(\)]{6,20}$")
+
+    def _looks_like_hint(row):
+        mapped = _map_row(headers, row)
+        mobile = mapped.get("mobile", "").strip()
+        return not mobile or not _PHONE_RE.match(mobile)
+
+    data_rows = [r for r in data_rows if not _looks_like_hint(r)]
+    return [_map_row(headers, row) for row in data_rows]
 
 
 _UAE_LOCAL_RE = re.compile(r"^0?5\d{8}$")
