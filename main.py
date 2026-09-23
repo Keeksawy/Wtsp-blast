@@ -12,6 +12,7 @@ import sys
 import socket
 import threading
 import time
+import tempfile
 
 
 # ── Path bootstrap (must run before any project import) ───────────────────
@@ -37,6 +38,29 @@ def _bootstrap():
 
 
 _bootstrap()
+
+# ── Single-instance lock (atomic, survives fast double-click) ─────────────
+_LOCK_FILE = None   # keep file object alive for the lifetime of the process
+
+def _acquire_instance_lock() -> bool:
+    """Try to grab an exclusive OS-level lock. Returns True if we're the first instance."""
+    global _LOCK_FILE
+    lock_path = os.path.join(
+        os.environ.get("WA_DATA_DIR") or tempfile.gettempdir(),
+        "wa_outreach.lock",
+    )
+    try:
+        _LOCK_FILE = open(lock_path, "w")
+        if sys.platform == "win32":
+            import msvcrt
+            msvcrt.locking(_LOCK_FILE.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(_LOCK_FILE, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except (OSError, IOError):
+        return False
+
 
 # Force WebView2 (Edge) backend on Windows — avoids pythonnet/.NET entirely.
 if sys.platform == "win32":
@@ -185,19 +209,9 @@ def main():
 
 
 def _run():
-    if _port_in_use(FLASK_PORT):
-        webview.create_window(
-            "WA Outreach",
-            html=(
-                "<body style='font-family:sans-serif;padding:48px;text-align:center'>"
-                "<h2 style='color:#0F2240'>WA Outreach is already running.</h2>"
-                "<p style='color:#666;margin-top:8px'>Check your taskbar or system tray.</p>"
-                "</body>"
-            ),
-            width=420, height=200,
-        )
-        webview.start()
-        return
+    if not _acquire_instance_lock():
+        # Another instance already holds the lock — exit silently.
+        sys.exit(0)
 
     flask_thread = threading.Thread(target=_start_flask, daemon=True)
     flask_thread.start()
