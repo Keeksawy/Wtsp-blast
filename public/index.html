@@ -181,9 +181,32 @@
         <div class="card" style="margin-bottom:16px">
           <div class="card-header">
             <h2 class="card-title">Import Contacts</h2>
-            <button class="btn-ghost btn-sm" onclick="fetch('/api/open-template-csv')">⬇ Download Template</button>
           </div>
-          <p class="hint">Upload an Excel or CSV file. Required columns: <strong>Owner Name</strong>, <strong>Mobile Number</strong>, <strong>Unit Number</strong>. Optional: <strong>Campaign Name</strong>, <strong>Sales Agent ID</strong>.</p>
+
+          <div style="background:#f8f9fb;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:14px;font-size:13px;line-height:1.7">
+            <p style="margin:0 0 10px;font-weight:600;color:#0F2240">How to prepare your file</p>
+            <p style="margin:0 0 6px">1. Download the template CSV here: <a href="https://raw.githubusercontent.com/Keeksawy/Wtsp-blast/main/public/contact_template.csv" target="_blank" style="color:#C4A257;font-weight:600">contact_template.csv</a> — open it in Excel or Google Sheets.</p>
+            <p style="margin:0 0 6px">2. Fill in your contacts starting from row 2. <strong>Do not rename the column headers.</strong></p>
+            <p style="margin:0 0 10px">3. Save as <strong>.csv</strong> or <strong>.xlsx</strong> and upload below.</p>
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead>
+                <tr style="background:#e8edf3;text-align:left">
+                  <th style="padding:5px 8px;border:1px solid #d1d9e0">Column</th>
+                  <th style="padding:5px 8px;border:1px solid #d1d9e0">Required</th>
+                  <th style="padding:5px 8px;border:1px solid #d1d9e0">Maps to placeholder</th>
+                  <th style="padding:5px 8px;border:1px solid #d1d9e0">Example</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td style="padding:5px 8px;border:1px solid #d1d9e0">Owner Name</td><td style="padding:5px 8px;border:1px solid #d1d9e0">Yes</td><td style="padding:5px 8px;border:1px solid #d1d9e0"><code>{{Owner_Name}}</code></td><td style="padding:5px 8px;border:1px solid #d1d9e0">Ahmed Al Mansoori</td></tr>
+                <tr style="background:#f8f9fb"><td style="padding:5px 8px;border:1px solid #d1d9e0">Mobile Number</td><td style="padding:5px 8px;border:1px solid #d1d9e0">Yes</td><td style="padding:5px 8px;border:1px solid #d1d9e0">Used to send the message</td><td style="padding:5px 8px;border:1px solid #d1d9e0">+971501234567</td></tr>
+                <tr><td style="padding:5px 8px;border:1px solid #d1d9e0">Unit Number</td><td style="padding:5px 8px;border:1px solid #d1d9e0">Yes</td><td style="padding:5px 8px;border:1px solid #d1d9e0"><code>{{Unit_Number}}</code></td><td style="padding:5px 8px;border:1px solid #d1d9e0">APT-2204</td></tr>
+                <tr style="background:#f8f9fb"><td style="padding:5px 8px;border:1px solid #d1d9e0">Campaign Name</td><td style="padding:5px 8px;border:1px solid #d1d9e0">No</td><td style="padding:5px 8px;border:1px solid #d1d9e0">Groups contacts in reports</td><td style="padding:5px 8px;border:1px solid #d1d9e0">Q4 Campaign</td></tr>
+                <tr><td style="padding:5px 8px;border:1px solid #d1d9e0">Sales Agent ID</td><td style="padding:5px 8px;border:1px solid #d1d9e0">No</td><td style="padding:5px 8px;border:1px solid #d1d9e0">Assigned agent in CRM</td><td style="padding:5px 8px;border:1px solid #d1d9e0">AGENT-001</td></tr>
+              </tbody>
+            </table>
+            <p style="margin:10px 0 0;color:#666">⚠️ Mobile numbers must include the country code (e.g. <strong>+971</strong> for UAE). Numbers without it will be skipped.</p>
+          </div>
 
           <div id="upload-zone" class="upload-zone"
             ondragover="event.preventDefault(); document.getElementById('upload-zone').classList.add('drag-over')"
