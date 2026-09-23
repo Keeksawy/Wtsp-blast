@@ -478,6 +478,24 @@ function handleDrop(e) {
   }
 }
 
+async function downloadTemplate() {
+  try {
+    const res = await fetch('/contact_template.xlsx');
+    if (!res.ok) throw new Error('Failed to fetch template');
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'contact_template.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  } catch (e) {
+    alert('Could not download template: ' + e.message);
+  }
+}
+
 async function importFile() {
   const fileInput    = document.getElementById('import-file');
   const campaignName = document.getElementById('campaign-name').value;
