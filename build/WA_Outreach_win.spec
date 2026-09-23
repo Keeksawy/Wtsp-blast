@@ -3,40 +3,44 @@
 #   pyinstaller build\WA_Outreach_win.spec --clean --noconfirm
 #
 # Output: dist\WA Outreach\WA Outreach.exe
-#         (wrap with Inno Setup using build\installer_win.iss)
 
-import sys
 from pathlib import Path
+from PyInstaller.utils.hooks import collect_all
 
 PROJECT = Path(SPECPATH).parent   # noqa: F821
 
 block_cipher = None
 
+# Collect pywebview package data, binaries and hidden imports up front
+_wv_datas, _wv_bins, _wv_hidden = collect_all("webview")
+
 a = Analysis(
     [str(PROJECT / "main.py")],
     pathex=[str(PROJECT)],
-    binaries=[],
+    binaries=_wv_bins,
     datas=[
         (str(PROJECT / "public"),        "public"),
         (str(PROJECT / "config"),        "config"),
         (str(PROJECT / "src"),           "src"),
         (str(PROJECT / "assets"),        "assets"),
         *([( str(PROJECT / ".env"), ".")] if (PROJECT / ".env").exists() else []),
+        *_wv_datas,
     ],
     hiddenimports=[
-        "engineio.async_drivers.threading",
+        # Flask / Werkzeug
         "flask",
         "flask.templating",
         "werkzeug.serving",
-        # pywebview Windows backend (uses Microsoft WebView2)
+        # pywebview Windows backends
         "webview",
         "webview.platforms.winforms",
         "webview.platforms.edgechromium",
-        "clr",         # pythonnet, used by winforms backend
+        "clr",
         # Playwright
         "playwright",
         "playwright.sync_api",
         "playwright._impl._sync_base",
+        "playwright._impl._driver",
         # Others
         "phonenumbers",
         "phonenumbers.data",
@@ -45,6 +49,7 @@ a = Analysis(
         "openpyxl",
         "openpyxl.styles",
         "openpyxl.utils",
+        *_wv_hidden,
     ],
     hookspath=[],
     hooksconfig={},
@@ -55,12 +60,6 @@ a = Analysis(
     cipher=block_cipher,
     noarchive=False,
 )
-
-from PyInstaller.utils.hooks import collect_all
-webview_datas, webview_binaries, webview_hiddenimports = collect_all("webview")
-a.datas    += webview_datas
-a.binaries += webview_binaries
-a.hiddenimports += webview_hiddenimports
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)   # noqa: F821
 
@@ -76,8 +75,6 @@ exe = EXE(   # noqa: F821
     upx=True,
     console=False,
     icon=str(PROJECT / "assets" / "icon.ico"),
-    # Windows manifest — request DPI awareness
-    uac_admin=False,
 )
 
 coll = COLLECT(   # noqa: F821
