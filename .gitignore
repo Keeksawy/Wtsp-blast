@@ -19,9 +19,6 @@ env/
 data/
 "WA Outreach Data"/
 
-# WhatsApp session profiles
-data/sessions/
-
 # PyInstaller build artefacts
 build/WA_Outreach_mac/
 build/WA_Outreach_win/
