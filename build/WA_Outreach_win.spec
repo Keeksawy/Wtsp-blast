@@ -31,11 +31,9 @@ a = Analysis(
         "flask",
         "flask.templating",
         "werkzeug.serving",
-        # pywebview Windows backends
+        # pywebview Windows backend (WebView2/Edge — no .NET needed)
         "webview",
-        "webview.platforms.winforms",
         "webview.platforms.edgechromium",
-        "clr",
         # Playwright
         "playwright",
         "playwright.sync_api",

@@ -48,6 +48,11 @@ def _bootstrap():
 
 _bootstrap()
 
+# Force WebView2 (Edge) backend on Windows — avoids the pythonnet/.NET dependency entirely.
+# WebView2 is built into Windows 10/11 via Microsoft Edge.
+if sys.platform == "win32":
+    os.environ.setdefault("PYWEBVIEW_GUI", "edgechromium")
+
 import webview   # noqa: E402  (must come after _bootstrap sets cwd)
 
 
