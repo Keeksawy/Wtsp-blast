@@ -1,65 +1,118 @@
-# WA Outreach — Tester Install Guide
+# WA Outreach — Install Guide
+
+---
 
 ## Mac
 
-### Install
-1. Download `WA_Outreach_Mac.zip`
-2. Double-click to unzip → you get `WA Outreach.app`
-3. Drag `WA Outreach.app` into your **Applications** folder
+### Step 1 — Download & unzip
+1. Download `WA_Outreach_Mac.zip` from the link you were sent
+2. Go to your **Downloads** folder and double-click `WA_Outreach_Mac.zip` to unzip it
+3. You will see a file called **WA Outreach.app** appear
+4. Drag **WA Outreach.app** into your **Applications** folder (open Finder → click Applications on the left sidebar → drag the app in)
 
-### First launch (Gatekeeper bypass — one time only)
-Because the app isn't yet signed with an Apple certificate, macOS will block it the first time.
+---
 
-**Fix:**
-1. In Finder, **right-click** `WA Outreach.app` → **Open**
-2. A dialog appears: click **Open** again
-3. From now on, double-click works normally
+### Step 2 — First launch (you must do this every new version)
 
-> If you see "damaged and can't be opened", run this in Terminal once:
-> ```
-> xattr -cr "/Applications/WA Outreach.app"
-> ```
+When you double-click the app for the first time, macOS will block it and show a message like **"WA Outreach Not Opened"** or **"Apple could not verify…"**. This happens because the app is not yet registered with Apple. It is safe — follow the steps below to open it.
 
-### First launch (Chromium download)
-On the very first launch, the app downloads Playwright's Chromium browser (~150 MB) in the background. This is what drives the WhatsApp Web sessions. The app is fully usable while this downloads — you only need Chromium once you add a WhatsApp number.
+**Do NOT click "Move to Trash."** Click **Done** to dismiss that popup, then follow these steps:
+
+#### Option A — Using Terminal (recommended, takes 30 seconds)
+
+1. Open **Terminal**
+   - Press **Command (⌘) + Space** on your keyboard to open Spotlight Search
+   - Type **Terminal** and press Enter
+   - A black window opens — that is Terminal
+
+2. Copy and paste this command into Terminal, then press **Enter**:
+   ```
+   xattr -cr "/Applications/WA Outreach.app"
+   ```
+   *(Nothing will appear after you press Enter — that is normal)*
+
+3. Close Terminal
+
+4. Go to your **Applications** folder and double-click **WA Outreach** — it will open normally
+
+#### Option B — Using System Settings
+
+1. Try to open the app once (double-click it) so macOS registers the blocked attempt
+2. Open **System Settings** → **Privacy & Security**
+3. Scroll down until you see a message about **"WA Outreach" was blocked**
+4. Click **Open Anyway**
+5. Enter your Mac password if asked
+6. The app will open
+
+---
+
+### Step 3 — First run note
+The first time the app opens, it downloads a small browser component in the background (~150 MB). This only happens once. The app is usable while it downloads — you only need the browser when you connect a WhatsApp number.
 
 ---
 
 ## Windows
 
-### Install
-1. Download `WA_Outreach_Windows.zip`
-2. Unzip it anywhere (e.g. `C:\WA Outreach\`)
-3. Open the folder and run `WA Outreach.exe`
+### Step 1 — Download & unzip
+1. Download `WA_Outreach_Windows.zip` from the link you were sent
+2. Go to your **Downloads** folder, right-click `WA_Outreach_Windows.zip` and click **Extract All**
+3. Choose where to save it (e.g. your Desktop or `C:\WA Outreach\`) and click **Extract**
+4. Open the extracted folder and double-click **WA Outreach.exe**
 
-### First launch (SmartScreen bypass — one time only)
-Windows may show "Windows protected your PC".
+---
 
-**Fix:**
-1. Click **More info**
+### Step 2 — First launch (you must do this every new version)
+
+Windows may show a blue screen saying **"Windows protected your PC"**. This is normal for apps that are not yet registered with Microsoft. Follow these steps:
+
+1. Click **More info** (small link in the middle of the blue screen)
 2. Click **Run anyway**
+3. The app will open
 
-### WebView2 requirement
-The app needs Microsoft WebView2 (the browser engine for the UI window). It comes pre-installed on Windows 11 and recent Windows 10 machines. If the window doesn't open, download the WebView2 Runtime from:
-https://developer.microsoft.com/microsoft-edge/webview2/ (Evergreen Bootstrapper, ~2 MB)
+---
 
-### First launch (Chromium download)
-Same as Mac — ~150 MB download on first run, happens once in the background.
+### Step 3 — If the window never opens (WebView2 missing)
+The app needs a component called **Microsoft WebView2** to display its window. It comes pre-installed on Windows 11 and most up-to-date Windows 10 machines. If the app launches but no window appears:
+
+1. Go to: https://developer.microsoft.com/microsoft-edge/webview2/
+2. Download the **Evergreen Bootstrapper** (~2 MB)
+3. Run it and follow the prompts
+4. Open **WA Outreach.exe** again
+
+---
+
+### Step 4 — First run note
+Same as Mac — the app downloads a browser component (~150 MB) once in the background on first launch.
 
 ---
 
 ## Using the app
 
-1. **Sign in** with your `@drivenproperties.com` account
-   - First user: create an account from the login screen, it'll be admin
-2. **Numbers** → Add a WhatsApp number → scan the QR code with your phone (same as WhatsApp Web)
-3. **Campaign** → Import your contacts Excel/CSV → Start Sending
-4. **Inbox** → See replies from contacts, reply back
+1. **Sign in** with your `@drivenproperties.com` email
+   - If you are the first person signing in, create an account — it will automatically be set as admin
+2. **Numbers** → Add a WhatsApp number → scan the QR code with your phone (exactly like WhatsApp Web)
+3. **Campaign** → Import your contacts file → Start Sending
+4. **Inbox** → See replies from contacts and reply back
 
-## Known limitations in this test version
-- Each person runs their own copy of the app with their own data
-- WhatsApp sessions are stored locally on your machine
-- No cloud sync between team members yet
+---
+
+## Importing contacts
+
+Download the template here: https://raw.githubusercontent.com/Keeksawy/Wtsp-blast/main/public/contact_template.csv
+
+Open it in Excel or Google Sheets and fill in your contacts starting from **row 2**. Do not rename the column headers.
+
+| Column | Required | What it does |
+|---|---|---|
+| Owner Name | Yes | Fills in the contact's name in the message |
+| Mobile Number | Yes | The number the message is sent to |
+| Unit Number | Yes | Fills in the property unit in the message |
+| Campaign Name | No | Groups contacts together in reports |
+| Sales Agent ID | No | Tags the contact to an agent in your CRM |
+
+> **Mobile numbers must include the country code.** For UAE numbers, start with **+971** (e.g. +971501234567). Numbers without a country code will be skipped.
+
+---
 
 ## Feedback
-Send issues or feedback to kareem.mazhar@drivenproperties.com
+Send any issues or feedback to **kareem.mazhar@drivenproperties.com**
