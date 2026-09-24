@@ -45,10 +45,9 @@ _LOCK_FILE = None   # keep file object alive for the lifetime of the process
 def _acquire_instance_lock() -> bool:
     """Try to grab an exclusive OS-level lock. Returns True if we're the first instance."""
     global _LOCK_FILE
-    lock_path = os.path.join(
-        os.environ.get("WA_DATA_DIR") or tempfile.gettempdir(),
-        "wa_outreach.lock",
-    )
+    lock_dir = os.environ.get("WA_DATA_DIR") or tempfile.gettempdir()
+    os.makedirs(lock_dir, exist_ok=True)
+    lock_path = os.path.join(lock_dir, "wa_outreach.lock")
     try:
         _LOCK_FILE = open(lock_path, "w")
         if sys.platform == "win32":

@@ -105,5 +105,6 @@ app = BUNDLE(   # noqa: F821
             "NSAllowsLocalNetworking": True,
         },
         "LSMinimumSystemVersion": "11.0",
+        "LSMultipleInstancesProhibited": True,
     },
 )
