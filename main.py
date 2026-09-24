@@ -22,14 +22,9 @@ def _bootstrap():
         exe_path   = sys.executable
 
         if sys.platform == "darwin":
-            mac_macos    = os.path.dirname(exe_path)
-            mac_contents = os.path.dirname(mac_macos)
-            mac_app      = os.path.dirname(mac_contents)
-            data_root    = os.path.dirname(mac_app)
+            data_dir = os.path.join(os.path.expanduser("~"), "Library", "Application Support", "WA Outreach")
         else:
-            data_root = os.path.dirname(exe_path)
-
-        data_dir = os.path.join(data_root, "WA Outreach Data")
+            data_dir = os.path.join(os.path.dirname(exe_path), "WA Outreach Data")
         os.environ.setdefault("WA_DATA_DIR",              data_dir)
         os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", os.path.join(data_dir, "browsers"))
         os.chdir(bundle_dir)
