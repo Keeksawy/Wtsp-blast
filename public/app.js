@@ -478,19 +478,89 @@ function handleDrop(e) {
   }
 }
 
+let _importPreview = null;
+
 async function importFile() {
-  const fileInput    = document.getElementById('import-file');
-  const campaignName = document.getElementById('campaign-name').value;
+  const fileInput = document.getElementById('import-file');
   if (!fileInput.files[0]) return alert('Choose a file first');
   const fd = new FormData();
   fd.append('file', fileInput.files[0]);
-  if (campaignName) fd.append('campaignName', campaignName);
-  const r      = await fetch('/api/contacts/import', { method: 'POST', body: fd, headers: { 'X-Auth-Token': getToken() } });
+  document.getElementById('import-result').innerHTML = '<p class="hint">Analysing file…</p>';
+  const r = await fetch('/api/contacts/preview', { method: 'POST', body: fd, headers: { 'X-Auth-Token': getToken() } });
+  const preview = await r.json();
+  if (preview.error) {
+    document.getElementById('import-result').innerHTML = `<p style="color:red">${preview.error}</p>`;
+    return;
+  }
+  _importPreview = preview;
+  document.getElementById('import-result').innerHTML = '';
+
+  let html = '';
+
+  // Ready count
+  html += `<p style="margin:0 0 10px">✅ <strong>${preview.ready.length}</strong> contact${preview.ready.length !== 1 ? 's' : ''} ready to import</p>`;
+
+  // Auto-formatted
+  if (preview.autoFormatted.length) {
+    html += `<p style="margin:0 0 6px">🔄 <strong>${preview.autoFormatted.length}</strong> number${preview.autoFormatted.length !== 1 ? 's' : ''} auto-formatted:</p>`;
+    html += `<div style="max-height:120px;overflow-y:auto;background:#f4f6f9;border-radius:6px;padding:8px 10px;margin-bottom:10px;font-size:12px">`;
+    preview.autoFormatted.forEach(item => {
+      html += `<div style="margin-bottom:3px"><strong>${item.ownerName}</strong>: <span style="color:#888;text-decoration:line-through">${item.original}</span> → <span style="color:#27ae60;font-weight:600">${item.corrected}</span></div>`;
+    });
+    html += `</div>`;
+  }
+
+  // Invalid — editable
+  if (preview.invalid.length) {
+    html += `<p style="margin:0 0 6px">❌ <strong>${preview.invalid.length}</strong> invalid number${preview.invalid.length !== 1 ? 's' : ''} — fix below or they will be skipped:</p>`;
+    html += `<div style="max-height:200px;overflow-y:auto;margin-bottom:6px">`;
+    preview.invalid.forEach((item, i) => {
+      html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">`;
+      html += `<span style="min-width:130px;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${item.ownerName}">${item.ownerName || '(no name)'}</span>`;
+      html += `<input id="fix-${i}" value="${item.original}" placeholder="+971XXXXXXXXX" style="flex:1;padding:5px 8px;border:1px solid #d1d9e0;border-radius:4px;font-size:12px" />`;
+      html += `</div>`;
+    });
+    html += `</div>`;
+  }
+
+  document.getElementById('import-preview-body').innerHTML = html;
+  document.getElementById('import-preview-modal').style.display = 'flex';
+}
+
+async function confirmImport() {
+  const campaignName = document.getElementById('campaign-name').value || '';
+  const preview = _importPreview;
+  if (!preview) return;
+
+  // Collect any inline corrections the user typed
+  const corrections = preview.invalid
+    .map((item, i) => {
+      const fixed = (document.getElementById(`fix-${i}`)?.value || '').trim();
+      if (!fixed || fixed === item.original) return null;
+      return { ownerName: item.ownerName, mobile: fixed, unitNumber: item.unitNumber, salesAgentId: item.salesAgentId };
+    })
+    .filter(Boolean);
+
+  document.getElementById('import-preview-modal').style.display = 'none';
+  document.getElementById('import-result').innerHTML = '<p class="hint">Importing…</p>';
+
+  const r = await fetch('/api/contacts/import-rows', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Auth-Token': getToken() },
+    body: JSON.stringify({ rows: preview.ready, corrections, campaignName }),
+  });
   const result = await r.json();
+  _importPreview = null;
   document.getElementById('import-result').innerHTML = result.error
     ? `<p style="color:red">${result.error}</p>`
-    : `<p class="hint">Campaign "${result.campaignName}": ${result.added} added, ${result.mergedAsMultiUnit} merged as multi-unit, ${result.invalid} invalid numbers, ${result.duplicateSkipped} duplicates skipped, ${result.suppressedOptedOut} suppressed (previously opted out).</p>`;
+    : `<p class="hint">✅ "${result.campaignName}": ${result.added} added${result.mergedAsMultiUnit ? `, ${result.mergedAsMultiUnit} merged` : ''}${result.invalid ? `, ${result.invalid} invalid skipped` : ''}${result.duplicateSkipped ? `, ${result.duplicateSkipped} duplicates skipped` : ''}.</p>`;
   refreshAll();
+}
+
+function cancelImport() {
+  document.getElementById('import-preview-modal').style.display = 'none';
+  _importPreview = null;
+  document.getElementById('import-result').innerHTML = '';
 }
 
 // ── Campaign start/stop ───────────────────────────────────────────────

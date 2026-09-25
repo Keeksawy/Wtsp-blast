@@ -42,6 +42,18 @@
   </div>
 </div>
 
+<!-- ── Import preview modal ──────────────────────────────────────────── -->
+<div id="import-preview-modal" style="display:none;position:fixed;inset:0;background:rgba(15,34,64,.55);align-items:center;justify-content:center;z-index:1000">
+  <div class="modal-card" style="max-width:540px;width:92%">
+    <h3 style="margin:0 0 14px">Review Import</h3>
+    <div id="import-preview-body" style="font-size:13px"></div>
+    <div class="modal-btns" style="margin-top:16px">
+      <button onclick="confirmImport()">Confirm Import</button>
+      <button class="cancel" onclick="cancelImport()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Media-issue modal (shown before campaign launch) ─────────────── -->
 <div id="media-issue-modal" style="display:none;position:fixed;inset:0;background:rgba(15,34,64,.55);align-items:center;justify-content:center;z-index:1000">
   <div class="modal-card" style="max-width:480px">

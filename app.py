@@ -277,6 +277,37 @@ def delete_number_route(number_id):
     return jsonify({"ok": True})
 
 # ---- contacts ----
+@app.route("/api/contacts/preview", methods=["POST"])
+def preview_contacts_route():
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+    file = request.files["file"]
+    try:
+        rows = contacts_lib.parse_excel_buffer(file.read())
+        return jsonify(contacts_lib.preview_import(rows))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/contacts/import-rows", methods=["POST"])
+def import_rows_route():
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json() or {}
+    rows = (data.get("rows") or []) + (data.get("corrections") or [])
+    campaign_name = data.get("campaignName") or f"Campaign-{datetime.utcnow().strftime('%Y-%m-%d')}"
+    try:
+        summary = contacts_lib.import_contacts(rows, campaign_name)
+        db.update_settings({"lastCampaignName": campaign_name})
+        return jsonify({"campaignName": campaign_name, **summary})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/contacts/import", methods=["POST"])
 def import_contacts_route():
     if "file" not in request.files:

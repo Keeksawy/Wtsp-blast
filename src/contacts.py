@@ -68,10 +68,11 @@ _UAE_PREFIX_RE = re.compile(r"^971")
 
 def standardize_phone(raw):
     """Standardizes to E.164. Defaults to UAE (+971) when the number has no country
-    code and looks like a local UAE mobile (05x...). Returns dict(e164, valid, reason)."""
+    code and looks like a local UAE mobile (05x...). Returns dict(e164, valid, reason, corrected, original)."""
     if not raw:
-        return {"e164": None, "valid": False, "reason": "empty"}
+        return {"e164": None, "valid": False, "reason": "empty", "corrected": False, "original": ""}
     raw_str = str(raw).strip()
+    original = raw_str
     # Excel often exports phone numbers as floats, e.g. "971522478544.0"
     _float_match = re.match(r"^(\d+)\.0+$", raw_str)
     if _float_match:
@@ -89,11 +90,42 @@ def standardize_phone(raw):
     try:
         parsed = phonenumbers.parse(candidate, "AE")
     except phonenumbers.NumberParseException:
-        return {"e164": None, "valid": False, "reason": "unparseable_or_invalid"}
+        return {"e164": None, "valid": False, "reason": "unparseable_or_invalid", "corrected": False, "original": original}
     if not phonenumbers.is_valid_number(parsed):
-        return {"e164": None, "valid": False, "reason": "unparseable_or_invalid"}
+        return {"e164": None, "valid": False, "reason": "unparseable_or_invalid", "corrected": False, "original": original}
     e164 = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
-    return {"e164": e164, "valid": True, "reason": None}
+    corrected = original != e164
+    return {"e164": e164, "valid": True, "reason": None, "corrected": corrected, "original": original}
+
+
+def preview_import(rows):
+    """Parse rows and categorise without saving. Returns ready/autoFormatted/invalid."""
+    ready, auto_formatted, invalid = [], [], []
+    for row in rows:
+        if not row.get("ownerName") and not row.get("mobile"):
+            continue
+        result = standardize_phone(row.get("mobile"))
+        if result["valid"]:
+            if result["corrected"]:
+                auto_formatted.append({
+                    "ownerName": row.get("ownerName") or "",
+                    "original":  result["original"],
+                    "corrected": result["e164"],
+                })
+            ready.append({
+                "ownerName":   row.get("ownerName") or "",
+                "mobile":      result["e164"],
+                "unitNumber":  row.get("unitNumber") or "",
+                "salesAgentId": row.get("salesAgentId") or "",
+            })
+        else:
+            invalid.append({
+                "ownerName":   row.get("ownerName") or "",
+                "original":    row.get("mobile") or "",
+                "unitNumber":  row.get("unitNumber") or "",
+                "salesAgentId": row.get("salesAgentId") or "",
+            })
+    return {"ready": ready, "autoFormatted": auto_formatted, "invalid": invalid}
 
 
 def _now_iso():
