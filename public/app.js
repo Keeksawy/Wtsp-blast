@@ -321,7 +321,7 @@ async function refreshTemplates() {
           ` : `
             <label class="btn-ghost btn-sm tpl-upload-label">
               ⬆ Upload image or PDF
-              <input type="file" accept="image/*,.pdf,.bmp,.heic,.heif,.avif,.tiff,.tif" style="display:none" onchange="uploadTemplateImage('${tpl.id}', this)">
+              <input type="file" accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.bmp,.heic,.heif,.avif,.tiff,.tif" style="display:none" onchange="uploadTemplateImage('${tpl.id}', this)">
             </label>
           `}
         </div>
