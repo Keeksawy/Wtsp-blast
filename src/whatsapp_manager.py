@@ -109,10 +109,18 @@ class NumberSession:
     def _loop(self, page):
         connected = False
         last_poll = 0.0
+        last_login_check = 0.0
         while not self.stop_event.is_set():
             try:
                 if not connected:
                     connected = self._check_login_state(page)
+                elif time.time() - last_login_check > 60:
+                    # Periodically re-verify the session is still alive even when
+                    # we think we're connected — WhatsApp Web can expire the session
+                    # without notice, which would make the QR disappear from the UI.
+                    if not self._check_login_state(page):
+                        connected = False
+                    last_login_check = time.time()
 
                 # handle any pending send/etc commands, non-blocking
                 try:
@@ -595,6 +603,25 @@ class WhatsAppManager:
     def shutdown(self):
         for session in self.sessions.values():
             session.stop()
+
+    def reconnect_number(self, number_id):
+        """Stop the existing session and restart it with the same Chrome profile.
+        If the saved WhatsApp Web session is still valid it reconnects silently;
+        if it expired WhatsApp Web shows a fresh QR for the user to scan."""
+        number = db.find_number_by_id(number_id)
+        if not number:
+            raise RuntimeError(f"Number {number_id} not found")
+        session = self.sessions.pop(number_id, None)
+        if session:
+            try:
+                session.stop()
+            except Exception:
+                pass
+        self.qr_store.pop(number_id, None)
+        db.update_number(number_id, {"status": "initializing", "paused": False, "pauseReason": None})
+        new_session = NumberSession(self, number)
+        self.sessions[number_id] = new_session
+        new_session.start()
 
     def remove_number(self, number_id):
         session = self.sessions.pop(number_id, None)

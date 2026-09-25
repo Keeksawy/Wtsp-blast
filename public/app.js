@@ -432,6 +432,7 @@ async function refreshNumbers() {
           ${n.paused
             ? `<button onclick="resumeNumber(${n.id})">Resume</button>`
             : `<button onclick="pauseNumber(${n.id})">Pause</button>`}
+          <button onclick="reconnectNumber(${n.id})" title="Restart the WhatsApp session. Use this if the QR disappeared or the number shows as disconnected.">Reconnect</button>
           <button class="danger-text" onclick="deleteNumber(${n.id}, '${escHtml(n.label)}')">Delete</button>
         </div>
       </div>`).join('');
@@ -458,6 +459,10 @@ function replyRateLabel(r) {
 
 async function pauseNumber(id)  { await jpost(`/api/numbers/${id}/pause`,  {}); refreshNumbers(); }
 async function resumeNumber(id) { await jpost(`/api/numbers/${id}/resume`, {}); refreshNumbers(); }
+async function reconnectNumber(id) {
+  await jpost(`/api/numbers/${id}/reconnect`, {});
+  refreshNumbers();
+}
 
 async function deleteNumber(id, label) {
   if (!confirm(`Delete number "${label}"? This disconnects its session. Contacts already queued will still be sent by whichever number is next in rotation.`)) return;
@@ -551,9 +556,14 @@ async function confirmImport() {
   });
   const result = await r.json();
   _importPreview = null;
+  if (!result.error && result.campaignName) {
+    // Sync the launch field so Start Sending queues exactly these contacts
+    const launchInput = document.getElementById('launch-campaign-name');
+    if (launchInput) launchInput.value = result.campaignName;
+  }
   document.getElementById('import-result').innerHTML = result.error
     ? `<p style="color:red">${result.error}</p>`
-    : `<p class="hint">✅ "${result.campaignName}": ${result.added} added${result.mergedAsMultiUnit ? `, ${result.mergedAsMultiUnit} merged` : ''}${result.invalid ? `, ${result.invalid} invalid skipped` : ''}${result.duplicateSkipped ? `, ${result.duplicateSkipped} duplicates skipped` : ''}.</p>`;
+    : `<p class="hint">✅ "${result.campaignName}": ${result.added} added${result.mergedAsMultiUnit ? `, ${result.mergedAsMultiUnit} merged` : ''}${result.invalid ? `, ${result.invalid} invalid skipped` : ''}${result.duplicateSkipped ? `, ${result.duplicateSkipped} duplicates skipped` : ''}. <strong>↓ Click ▶ Start Sending below to begin.</strong></p>`;
   refreshAll();
 }
 

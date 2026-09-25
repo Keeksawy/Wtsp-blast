@@ -260,6 +260,15 @@ def resume_number(number_id):
     return jsonify({"ok": True})
 
 
+@app.route("/api/numbers/<int:number_id>/reconnect", methods=["POST"])
+def reconnect_number(number_id):
+    try:
+        wa_manager.reconnect_number(number_id)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/numbers/<int:number_id>/cap", methods=["POST"])
 def set_cap(number_id):
     body = request.get_json(silent=True) or {}
