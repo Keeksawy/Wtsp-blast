@@ -40,7 +40,7 @@ SELECTORS = {
     "unread_badge": "span[aria-label*='unread']",
     # Multiple fallback selectors for inbound messages — WhatsApp changes class names periodically
     "message_in": "div.message-in, div[class*='message-in'], [data-testid='msg-container'] [class*='copyable-text']",
-    "last_message_in": "div.message-in span.selectable-text span",
+    "last_message_in": "div.message-in span.selectable-text",
     "invalid_number_dialog": "div[data-animate-modal-popup='true']",
 }
 
@@ -376,11 +376,13 @@ class NumberSession:
                 if m.get("body"):
                     known_outbound.add(m["body"].strip())
 
-            # Strategy 1: inbound-specific selectors (class-based)
+            # Strategy 1: inbound-specific selectors (class-based).
+            # Target the selectable-text CONTAINER, not its child spans, so
+            # inner_text() returns the full multi-line message body.
             all_bodies = []
             for sel in [
-                "div.message-in span.selectable-text span",
-                "div[class*='message-in'] span[class*='selectable-text'] span",
+                "div.message-in span.selectable-text",
+                "div[class*='message-in'] span[class*='selectable-text']",
                 "div[class*='message-in'] span[dir='ltr']",
             ]:
                 els = page.locator(sel)
@@ -415,9 +417,8 @@ class NumberSession:
                             for ob in known_outbound if len(ob) > 5
                         )
                         if not is_outbound:
-                            # Use first non-empty line as the message body
-                            lines = [l.strip() for l in full_text.splitlines() if l.strip()]
-                            body = lines[0] if lines else full_text
+                            # Keep the full message — multi-line replies must not be truncated
+                            body = full_text
                             if body and len(body) > 1:
                                 all_bodies.append(body)
                     except Exception:
