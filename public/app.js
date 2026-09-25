@@ -803,8 +803,11 @@ function renderInboxThread(contactId) {
   const msgs    = conv.messages || [];
   const inputId = 'reply-' + contactId;
 
-  // Preserve any draft text the user is typing — the 8-second poll wipes innerHTML
-  const draftText = document.getElementById(inputId)?.value || '';
+  // Snapshot state before innerHTML wipe — the 8-second poll destroys the textarea
+  const prevInput  = document.getElementById(inputId);
+  const draftText  = prevInput?.value || '';
+  const hadFocus   = document.activeElement === prevInput;
+  const cursorPos  = prevInput?.selectionStart ?? draftText.length;
 
   thread.innerHTML = `
     <div class="thread-header">
@@ -844,10 +847,16 @@ function renderInboxThread(contactId) {
       <button class="primary" onclick="sendReply('${contactId}',${conv.numberId || 'null'},'${inputId}')">Send</button>
     </div>`;
 
-  // Restore draft text if the user was mid-type before the poll rebuilt the thread
-  if (draftText) {
+  // Restore draft text, focus, and cursor position after the rebuild
+  if (draftText || hadFocus) {
     const newInput = document.getElementById(inputId);
-    if (newInput) newInput.value = draftText;
+    if (newInput) {
+      if (draftText) newInput.value = draftText;
+      if (hadFocus) {
+        newInput.focus();
+        newInput.setSelectionRange(cursorPos, cursorPos);
+      }
+    }
   }
 
   document.getElementById('thread-msgs')?.scrollTo(0, 999999);
