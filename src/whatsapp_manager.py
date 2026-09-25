@@ -250,33 +250,34 @@ class NumberSession:
 
             is_pdf = Path(image_path).suffix.lower() == ".pdf"
 
-            # Attach via the file-chooser triggered by the paperclip menu
+            # Attach via the file-chooser triggered by the paperclip menu.
+            # IMPORTANT: click the paperclip OUTSIDE expect_file_chooser — the file
+            # chooser is only triggered by the submenu item click, not the paperclip.
             try:
+                page.locator(
+                    '[data-testid="attach-menu-icon"], '
+                    '[title="Attach"], '
+                    'span[data-icon="attach-menu-background"], '
+                    'div[title="Attach"]'
+                ).first.click()
+                page.wait_for_timeout(600)  # wait for submenu to render
+
                 with page.expect_file_chooser(timeout=8000) as fc_info:
-                    page.locator(
-                        '[data-testid="attach-menu-icon"], '
-                        '[title="Attach"], '
-                        'span[data-icon="attach-menu-background"], '
-                        'div[title="Attach"]'
-                    ).first.click()
-                    page.wait_for_timeout(400)
                     if is_pdf:
-                        # Click the Document option
                         page.locator(
                             'li span[data-testid="attach-menu-document-icon"], '
                             '[data-testid="mi-attach-document"], '
-                            'input[accept*="pdf"], input[accept*="application"]'
+                            'li[title="Document"]'
                         ).first.click()
                     else:
-                        # Click the Photos & Videos option
                         page.locator(
                             'li span[data-testid="attach-menu-photo-video-icon"], '
                             '[data-testid="mi-attach-photo-video"], '
-                            'input[accept*="image"]'
+                            'li[title="Photos & Videos"]'
                         ).first.click()
                 fc_info.value.set_files(image_path)
             except Exception:
-                # Fallback: directly set a hidden file input
+                # Fallback: directly set a hidden file input (visible after the menu opens)
                 file_input = page.locator('input[type="file"]').first
                 file_input.set_input_files(image_path)
 

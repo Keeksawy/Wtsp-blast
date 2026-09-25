@@ -660,6 +660,15 @@ async function refreshDashboard() {
 }
 
 // ── Contacts ──────────────────────────────────────────────────────────
+async function retryContact(contactId) {
+  const r = await jpost(`/api/contacts/${contactId}/requeue`, {});
+  if (r.ok) {
+    refreshContacts();
+  } else {
+    alert('Retry failed: ' + (r.error || 'unknown error'));
+  }
+}
+
 async function clearInvalidContacts() {
   const contacts = await jget('/api/contacts');
   const invalid  = contacts.filter(c => c.invalidNumber || !c.phoneE164).length;
@@ -703,7 +712,7 @@ async function refreshContacts() {
     const isFailed    = c.messageStatus === 'failed';
     const errorTip    = isFailed && c.lastSendError ? c.lastSendError.replace(/"/g, '&quot;') : '';
     const statusCell  = isFailed
-      ? `<td><span class="status-pill pill-failed" title="${errorTip}" style="cursor:help">&#9888; failed</span></td>`
+      ? `<td><span class="status-pill pill-failed" title="${errorTip || 'Hover for details'}" style="cursor:help">&#9888; failed</span> <button onclick="retryContact('${c.contactId}')" style="font-size:11px;padding:2px 6px;margin-left:4px">Retry</button></td>`
       : `<td><span class="status-pill ${pillClass}">${statusLabel}</span></td>`;
     const crmIntent = c.crmLeadIntent;
     const crmCell   = crmIntent
@@ -794,6 +803,9 @@ function renderInboxThread(contactId) {
   const msgs    = conv.messages || [];
   const inputId = 'reply-' + contactId;
 
+  // Preserve any draft text the user is typing — the 8-second poll wipes innerHTML
+  const draftText = document.getElementById(inputId)?.value || '';
+
   thread.innerHTML = `
     <div class="thread-header">
       <div class="thread-avatar">${(conv.contactName || '?')[0].toUpperCase()}</div>
@@ -831,6 +843,12 @@ function renderInboxThread(contactId) {
         onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendReply('${contactId}',${conv.numberId || 'null'},'${inputId}')}"></textarea>
       <button class="primary" onclick="sendReply('${contactId}',${conv.numberId || 'null'},'${inputId}')">Send</button>
     </div>`;
+
+  // Restore draft text if the user was mid-type before the poll rebuilt the thread
+  if (draftText) {
+    const newInput = document.getElementById(inputId);
+    if (newInput) newInput.value = draftText;
+  }
 
   document.getElementById('thread-msgs')?.scrollTo(0, 999999);
 }
