@@ -18,31 +18,27 @@ When you double-click the app for the first time, macOS will block it and show a
 
 **Do NOT click "Move to Trash."** Click **Done** to dismiss that popup, then follow these steps:
 
-#### Option A — Using Terminal (recommended, takes 30 seconds)
+1. Make sure the app is in your **Applications** folder (not in Downloads or on the Desktop). If you haven't done this yet:
+   - Open Finder
+   - Click **Downloads** on the left sidebar
+   - Drag **WA Outreach.app** into **Applications** on the left sidebar
 
-1. Open **Terminal**
-   - Press **Command (⌘) + Space** on your keyboard to open Spotlight Search
+2. Open **Terminal**:
+   - Press **Command (⌘) + Space** on your keyboard
    - Type **Terminal** and press Enter
-   - A black window opens — that is Terminal
+   - A black or white window opens — that is Terminal
 
-2. Copy and paste this command into Terminal, then press **Enter**:
+3. Copy and paste this command into Terminal, then press **Enter**:
    ```
-   xattr -cr "/Applications/WA Outreach.app"
+   sudo xattr -cr "/Applications/WA Outreach.app"
    ```
-   *(Nothing will appear after you press Enter — that is normal)*
 
-3. Close Terminal
+4. Terminal will ask for your **Mac login password**. Type it and press Enter.
+   *(The password won't show as you type — that is normal. Just type it and press Enter.)*
 
-4. Go to your **Applications** folder and double-click **WA Outreach** — it will open normally
+5. Nothing will appear after — that means it worked. Close Terminal.
 
-#### Option B — Using System Settings
-
-1. Try to open the app once (double-click it) so macOS registers the blocked attempt
-2. Open **System Settings** → **Privacy & Security**
-3. Scroll down until you see a message about **"WA Outreach" was blocked**
-4. Click **Open Anyway**
-5. Enter your Mac password if asked
-6. The app will open
+6. Go to **Applications** and double-click **WA Outreach** — it will open normally.
 
 ---
 
