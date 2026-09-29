@@ -683,6 +683,9 @@ def dashboard_route():
 
 @app.route("/api/contacts/<contact_id>/requeue", methods=["POST"])
 def requeue_contact_route(contact_id):
+    connected = [n for n in db.get_numbers() if n.get("status") == "connected"]
+    if not connected:
+        return jsonify({"ok": False, "error": "No WhatsApp number is connected. Please connect a number first before retrying."}), 400
     db.update_contact(contact_id, {
         "messageStatus": None,
         "invalidNumber": False,
