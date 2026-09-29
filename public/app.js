@@ -265,19 +265,25 @@ async function adminResetPassword() {
 // ── Settings ─────────────────────────────────────────────────────────
 async function refreshSettings() {
   const s = await jget('/api/settings');
-  const minEl = document.getElementById('delay-min');
-  const maxEl = document.getElementById('delay-max');
-  const crmEl = document.getElementById('crm-webhook-url');
-  if (minEl) minEl.value = s.delayMinSeconds;
-  if (maxEl) maxEl.value = s.delayMaxSeconds;
-  if (crmEl) crmEl.value = s.crmWebhookUrl || '';
+  const minEl     = document.getElementById('delay-min');
+  const maxEl     = document.getElementById('delay-max');
+  const crmEl     = document.getElementById('crm-webhook-url');
+  const coEl      = document.getElementById('company-name');
+  const agentEl   = document.getElementById('default-agent-name');
+  if (minEl)   minEl.value   = s.delayMinSeconds;
+  if (maxEl)   maxEl.value   = s.delayMaxSeconds;
+  if (crmEl)   crmEl.value   = s.crmWebhookUrl     || '';
+  if (coEl)    coEl.value    = s.companyName        || '';
+  if (agentEl) agentEl.value = s.defaultAgentName   || '';
 }
 
 async function saveSettings() {
-  const delayMinSeconds = parseInt(document.getElementById('delay-min').value, 10);
-  const delayMaxSeconds = parseInt(document.getElementById('delay-max').value, 10);
-  const crmWebhookUrl = (document.getElementById('crm-webhook-url').value || '').trim();
-  await jpost('/api/settings', { delayMinSeconds, delayMaxSeconds, crmWebhookUrl });
+  const delayMinSeconds  = parseInt(document.getElementById('delay-min').value, 10);
+  const delayMaxSeconds  = parseInt(document.getElementById('delay-max').value, 10);
+  const crmWebhookUrl    = (document.getElementById('crm-webhook-url').value    || '').trim();
+  const companyName      = (document.getElementById('company-name').value        || '').trim();
+  const defaultAgentName = (document.getElementById('default-agent-name').value  || '').trim();
+  await jpost('/api/settings', { delayMinSeconds, delayMaxSeconds, crmWebhookUrl, companyName, defaultAgentName });
   document.getElementById('settings-result').innerHTML = '<p class="hint">Settings saved.</p>';
   refreshSettings();
 }

@@ -379,6 +379,24 @@
 
         <div class="card" style="margin-bottom:16px">
           <div class="card-header">
+            <h2 class="card-title">Sender Identity</h2>
+          </div>
+          <p class="hint">These fill the <code>{{Company_Name}}</code> and <code>{{Agent_Name}}</code> placeholders in every message template. Changes take effect on the next send — no restart needed.</p>
+          <div class="form-row" style="margin-bottom:10px">
+            <label class="field-label" style="white-space:nowrap;align-self:center">Company name:</label>
+            <input id="company-name" placeholder="e.g. Driven Properties" style="flex:1" />
+          </div>
+          <div class="form-row">
+            <label class="field-label" style="white-space:nowrap;align-self:center">Default agent name:</label>
+            <input id="default-agent-name" placeholder="e.g. Kareem" style="flex:1" />
+          </div>
+          <div style="margin-top:10px">
+            <button class="btn-secondary" onclick="saveSettings()">Save</button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header">
             <h2 class="card-title">CRM Webhook</h2>
           </div>
           <p class="hint">Receives a lead payload when a contact replies with a SELL or RENT keyword. Leave blank to disable.</p>

@@ -69,6 +69,11 @@ runner = CampaignRunner(wa_manager, cfg, company_name=COMPANY_NAME, agent_defaul
 # Seed CRM webhook URL from env if not already saved in DB
 if CRM_WEBHOOK_URL and not db.get_settings().get("crmWebhookUrl"):
     db.update_settings({"crmWebhookUrl": CRM_WEBHOOK_URL})
+# Seed company name and default agent name from env if not already saved
+if not db.get_settings().get("companyName"):
+    db.update_settings({"companyName": COMPANY_NAME})
+if not db.get_settings().get("defaultAgentName"):
+    db.update_settings({"defaultAgentName": DEFAULT_AGENT_NAME})
 
 # Seed initial users if none exist yet
 _INITIAL_USERS = [
@@ -579,6 +584,10 @@ def update_settings_route():
         patch["delayMaxSeconds"] = patch["delayMinSeconds"]
     if "crmWebhookUrl" in body:
         patch["crmWebhookUrl"] = str(body["crmWebhookUrl"]).strip()
+    if "companyName" in body:
+        patch["companyName"] = str(body["companyName"]).strip()
+    if "defaultAgentName" in body:
+        patch["defaultAgentName"] = str(body["defaultAgentName"]).strip()
     settings = db.update_settings(patch)
     return jsonify(settings)
 

@@ -126,11 +126,12 @@ class CampaignRunner:
     def _send_one(self, number_id, next_item):
         contact = next_item["contact"]
         kind = next_item["kind"]
+        s = db.get_settings()
         v = {
             "ownerName": contact.get("ownerName"),
             "unitNumber": contact.get("unitNumber"),
-            "agentName": contact.get("assignedAgent") or self.agent_default_name,
-            "companyName": self.company_name,
+            "agentName": contact.get("assignedAgent") or s.get("defaultAgentName") or self.agent_default_name,
+            "companyName": s.get("companyName") or self.company_name,
         }
         rendered = templates.render_for_contact(kind, contact, v, follow_up_index=contact.get("followUpCount") or 0, cfg=self.cfg)
         text, template_obj, greeting, opt_out_line = rendered["text"], rendered["templateObj"], rendered["greeting"], rendered["optOutLine"]

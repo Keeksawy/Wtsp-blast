@@ -533,7 +533,7 @@ class NumberSession:
             from . import templates
             text = templates.render(templates.OPT_OUT_CONFIRMATION["text"], {
                 "ownerName": contact.get("ownerName"), "unitNumber": contact.get("unitNumber"),
-                "companyName": self.manager.company_name,
+                "companyName": db.get_settings().get("companyName") or self.manager.company_name,
             })
             try:
                 self.send(contact["phoneE164"], text)
