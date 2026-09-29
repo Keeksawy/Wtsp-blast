@@ -270,7 +270,11 @@ class NumberSession:
             _PREVIEW_APPEARED = (
                 '[data-testid="media-upload-dialog"], '
                 '[data-testid="photo-caption"], '
-                'div[data-testid="media-caption-input-container"]'
+                'div[data-testid="media-caption-input-container"], '
+                '[data-testid="document-upload-dialog"], '
+                'div[data-testid="media-canvas"], '
+                'div[class*="media-upload"], '
+                'span[data-icon="document-pdf"]'
             )
 
             # Approach 1: click paperclip → wait for menu → capture file chooser
@@ -325,17 +329,31 @@ class NumberSession:
                 except Exception as e2:
                     print(f"[send_image] approach 2 failed: {e2}", flush=True)
 
+            _debug_dir = Path(db.DATA_DIR)
+
             if not attached:
+                try:
+                    page.screenshot(path=str(_debug_dir / "debug_attach_fail.png"))
+                    print("[send_image] screenshot saved: debug_attach_fail.png", flush=True)
+                except Exception:
+                    pass
                 return False, "Could not open file attachment dialog — WhatsApp Web UI may have changed"
 
             # Verify the media preview appeared. Without this check a failed attach
             # would silently fall through and send a text-only message marked as "sent".
             try:
-                page.wait_for_selector(_PREVIEW_APPEARED, timeout=8000)
+                page.wait_for_selector(_PREVIEW_APPEARED, timeout=10000)
             except Exception:
+                try:
+                    page.screenshot(path=str(_debug_dir / "debug_preview_fail.png"))
+                    print("[send_image] screenshot saved: debug_preview_fail.png", flush=True)
+                    btns = page.evaluate("() => [...document.querySelectorAll('button,span[data-icon]')].map(el=>el.outerHTML.slice(0,120))")
+                    print(f"[send_image] visible buttons/icons: {btns[:20]}", flush=True)
+                except Exception:
+                    pass
                 return False, (
                     f"File attachment failed — preview did not appear "
-                    f"({'PDF' if is_pdf else 'image'} may be rejected by WhatsApp or attach selectors are stale)"
+                    f"({'PDF' if is_pdf else 'image'} may be rejected by WhatsApp or selectors are stale)"
                 )
 
             # Type caption
@@ -353,9 +371,26 @@ class NumberSession:
                 except Exception:
                     pass
 
-            # Send
-            send_btn = page.locator(SELECTORS["send_button"]).last
-            send_btn.wait_for(state="visible", timeout=10000)
+            # Send — use a broad selector covering both the compose and media-preview send buttons
+            _SEND_BTN = (
+                'button[data-testid="send"], '
+                'div[data-testid="send"], '
+                'span[data-testid="send"], '
+                'button[aria-label="Send"], '
+                'span[data-icon="send"]'
+            )
+            send_btn = page.locator(_SEND_BTN).last
+            try:
+                send_btn.wait_for(state="visible", timeout=10000)
+            except Exception:
+                try:
+                    page.screenshot(path=str(_debug_dir / "debug_send_fail.png"))
+                    print("[send_image] screenshot saved: debug_send_fail.png", flush=True)
+                    btns = page.evaluate("() => [...document.querySelectorAll('button,span[data-icon]')].map(el=>el.outerHTML.slice(0,120))")
+                    print(f"[send_image] visible buttons/icons: {btns[:20]}", flush=True)
+                except Exception:
+                    pass
+                raise
             send_btn.click()
             page.wait_for_timeout(2000)
 
