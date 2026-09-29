@@ -709,6 +709,24 @@ def clear_all_contacts_route():
     return jsonify({"removed": removed})
 
 
+@app.route("/api/reset", methods=["POST"])
+def reset_route():
+    """Stop all number connections and wipe contacts, messages, and numbers.
+    Settings and users are preserved."""
+    user = _current_user()
+    if not user or user.get("role") != "admin":
+        return jsonify({"error": "Admin only"}), 403
+    for n in db.get_numbers():
+        nid = n.get("id")
+        if nid:
+            try: runner.stop_number(nid)
+            except Exception: pass
+            try: wa_manager.remove_number(nid)
+            except Exception: pass
+    db.reset_campaign_data()
+    return jsonify({"ok": True})
+
+
 @app.route("/api/inbox", methods=["GET"])
 def inbox_route():
     """Return all messages (both directions) grouped into conversations by contact."""

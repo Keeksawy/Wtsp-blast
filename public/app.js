@@ -122,6 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
 let _currentPage    = 'dashboard';
 let _selectedConvId = null;
 let _inboxData      = [];
+let _inboxSending   = false;  // true while an inbox reply is in-flight
 
 function navigate(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -259,6 +260,18 @@ async function adminResetPassword() {
     document.getElementById('reset-user-password').value = '';
   } else {
     el.innerHTML = `<p style="color:#b00">${r.error || 'Reset failed.'}</p>`;
+  }
+}
+
+async function resetCampaignData() {
+  const el = document.getElementById('reset-campaign-result');
+  if (!confirm('This will permanently delete ALL contacts, message history, and WhatsApp numbers.\n\nSettings and templates are kept.\n\nAre you sure?')) return;
+  el.textContent = 'Resetting…';
+  const r = await jpost('/api/reset', {});
+  if (r.ok) {
+    el.innerHTML = '<span style="color:green">&#10003; Reset complete. Reload the page to see the clean state.</span>';
+  } else {
+    el.innerHTML = `<span style="color:#b00">${r.error || 'Reset failed.'}</span>`;
   }
 }
 
@@ -823,7 +836,8 @@ async function refreshInbox() {
 
   // Only render conversation list if on the inbox page
   if (_currentPage === 'inbox') renderInboxConversations();
-  if (_currentPage === 'inbox' && _selectedConvId) renderInboxThread(_selectedConvId);
+  // Skip re-rendering the thread while a reply is in-flight — avoids wiping the disabled input
+  if (_currentPage === 'inbox' && _selectedConvId && !_inboxSending) renderInboxThread(_selectedConvId);
 }
 
 function renderInboxConversations() {
@@ -935,19 +949,24 @@ function escHtml(s) {
 }
 
 async function sendReply(contactId, numberId, inputId) {
-  const input = document.getElementById(inputId);
-  const text  = (input?.value || '').trim();
+  if (_inboxSending) return;
+  const input  = document.getElementById(inputId);
+  const text   = (input?.value || '').trim();
   if (!text) return;
-  if (input) input.disabled = true;
+  const sendBtn = input?.closest('.inbox-compose')?.querySelector('button.primary');
+  _inboxSending = true;
+  if (input)   { input.disabled = true; }
+  if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sending…'; }
   const r = await jpost('/api/inbox/reply', { contactId, numberId, text });
+  _inboxSending = false;
   if (r.ok) {
-    if (input) input.value = '';
     await refreshInbox();
     renderInboxThread(_selectedConvId);
   } else {
     alert('Failed to send: ' + (r.error || 'unknown error'));
+    if (input)   { input.disabled = false; }
+    if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send'; }
   }
-  if (input) input.disabled = false;
 }
 
 // ── Time formatter ────────────────────────────────────────────────────

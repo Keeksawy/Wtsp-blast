@@ -142,6 +142,19 @@ def delete_number(number_id):
         persist()
 
 
+def reset_campaign_data():
+    """Clear contacts, messages, crm_events, and numbers; preserve settings and users."""
+    s = load()
+    with _lock:
+        s["contacts"]   = []
+        s["numbers"]    = []
+        s["messages"]   = []
+        s["crm_events"] = []
+        s["meta"]["next_contact_seq"] = 1
+        s["meta"]["next_number_seq"]  = 1
+        s["meta"]["next_message_seq"] = 1
+        persist()
+
 
 # ---- messages ----
 def log_message(entry):
