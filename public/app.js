@@ -50,7 +50,7 @@ async function submitLogin() {
     setAuthFromResponse(d);
     hideLogin();
     onAfterLogin(d);
-    navigate('numbers');
+    navigate('dashboard');
     refreshAll();
   } else {
     document.getElementById('login-error').textContent = d.error || 'Sign in failed.';
@@ -73,7 +73,7 @@ async function submitRegister() {
     setAuthFromResponse(d);
     hideLogin();
     onAfterLogin(d);
-    navigate('numbers');
+    navigate('dashboard');
     refreshAll();
   } else {
     document.getElementById('login-error').textContent = d.error || 'Registration failed.';
@@ -96,9 +96,9 @@ function onAfterLogin(user) {
   if (emailEl)  emailEl.textContent  = email;
   if (avatarEl) avatarEl.textContent = email ? email[0].toUpperCase() : 'U';
 
-  // Admin nav item
-  const adminNav = document.getElementById('nav-admin');
-  if (adminNav) adminNav.hidden = (role !== 'admin');
+  // Show admin section in Settings for admin users only
+  const adminSection = document.getElementById('settings-admin-section');
+  if (adminSection) adminSection.hidden = (role !== 'admin');
 }
 
 // ── DOMContentLoaded ─────────────────────────────────────────────────
@@ -111,7 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (getToken()) {
     hideLogin();
     onAfterLogin({ email: getEmail(), role: getRole() });
-    navigate('numbers');
+    navigate('dashboard');
     refreshAll();
   } else {
     showLogin();
@@ -119,7 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── Router ───────────────────────────────────────────────────────────
-let _currentPage    = 'numbers';
+let _currentPage    = 'dashboard';
 let _selectedConvId = null;
 let _inboxData      = [];
 
@@ -129,10 +129,12 @@ function navigate(page) {
   document.getElementById('page-' + page)?.classList.add('active');
   document.getElementById('nav-'  + page)?.classList.add('active');
   _currentPage = page;
-  if (page === 'inbox')  renderInboxConversations();
-  if (page === 'admin')  refreshUsers();
-  if (page === 'numbers') refreshNumbers();
-  if (page === 'campaign') { refreshDashboard(); refreshNumbers(); }
+  if (page === 'inbox')     renderInboxConversations();
+  if (page === 'dashboard') refreshDashboard();
+  if (page === 'numbers')   refreshNumbers();
+  if (page === 'contacts')  refreshContacts();
+  if (page === 'campaign')  { refreshTemplates(); refreshNumbers(); }
+  if (page === 'settings')  { refreshSettings(); if (getRole() === 'admin') refreshUsers(); }
 }
 
 // ── Authenticated fetch helpers ──────────────────────────────────────
@@ -563,7 +565,7 @@ async function confirmImport() {
   }
   document.getElementById('import-result').innerHTML = result.error
     ? `<p style="color:red">${result.error}</p>`
-    : `<p class="hint">✅ "${result.campaignName}": ${result.added} added${result.mergedAsMultiUnit ? `, ${result.mergedAsMultiUnit} merged` : ''}${result.invalid ? `, ${result.invalid} invalid skipped` : ''}${result.duplicateSkipped ? `, ${result.duplicateSkipped} duplicates skipped` : ''}. <strong>↓ Click ▶ Start Sending below to begin.</strong></p>`;
+    : `<p class="hint">✅ "${result.campaignName}": ${result.added} added${result.mergedAsMultiUnit ? `, ${result.mergedAsMultiUnit} merged` : ''}${result.invalid ? `, ${result.invalid} invalid skipped` : ''}${result.duplicateSkipped ? `, ${result.duplicateSkipped} duplicates skipped` : ''}. <button onclick="navigate('campaign')" style="margin-left:8px;background:var(--navy);color:#fff;padding:4px 12px;font-size:12px;border-radius:6px">→ Go to Campaign</button></p>`;
   refreshAll();
 }
 
@@ -581,7 +583,7 @@ async function startCampaign() {
     const names = { A: 'Direct & professional', B: 'Question-first', C: 'Market-context', D: 'Short & informal', E: 'Courtesy-led' };
     const lines = validation.issues.map(i => `• Template ${i.templateId} (${names[i.templateId] || i.templateId}): ${i.reason}`).join('\n');
     document.getElementById('media-issue-body').textContent =
-      `The following template media files have problems and cannot be sent:\n\n${lines}\n\nYou can start without images, or cancel to fix the files in Settings first.`;
+      `The following template media files have problems and cannot be sent:\n\n${lines}\n\nYou can start without images, or cancel and fix the templates in Campaign first.`;
     document.getElementById('media-issue-modal').style.display = 'flex';
     return;
   }
@@ -617,56 +619,105 @@ async function refreshDashboard() {
   const d = await jget('/api/dashboard');
   if (!d || d.error) return;
 
-  const stats = [
-    ['Total Contacts',     d.totalContacts],
-    ['Valid Numbers',      d.validNumbers],
-    ['Invalid Numbers',    d.invalidNumbers],
-    ['Multi-Unit Owners',  d.multiUnitOwners],
-    ['Messages Sent',      d.messagesSent],
-    ['Messages Failed',    d.messagesFailed],
-    ['Replies Received',   d.repliesReceived],
-    ['Interested Selling', d.interestedSelling],
-    ['Interested Renting', d.interestedRenting],
-    ['Not Interested',     d.notInterested],
-    ['Opted Out',          d.optedOut],
-  ];
+  // Current Campaign card
+  const ccEl = document.getElementById('dashboard-current-campaign');
+  if (ccEl) {
+    const cc = d.currentCampaign;
+    if (cc) {
+      const sent   = cc.messagesSent  ?? 0;
+      const failed = cc.messagesFailed ?? 0;
+      const queued = Math.max(0, (cc.validNumbers ?? cc.totalContacts) - sent - failed);
+      const pct    = cc.totalContacts > 0 ? Math.round((sent / cc.totalContacts) * 100) : 0;
+      ccEl.innerHTML = `
+        <div style="font-size:15px;font-weight:600;color:var(--navy);margin-bottom:10px">${escHtml(cc.name)}</div>
+        <div class="progress-bar-wrap"><div class="progress-bar" style="width:${pct}%"></div></div>
+        <div style="font-size:11.5px;color:var(--text-muted);margin:4px 0 14px">${pct}% sent · ${cc.totalContacts} total contacts</div>
+        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
+          <div class="stat-card stat-sent"><div class="stat-value">${sent}</div><div class="stat-label">Sent</div></div>
+          <div class="stat-card stat-queued"><div class="stat-value">${queued}</div><div class="stat-label">Queued</div></div>
+          <div class="stat-card stat-failed"><div class="stat-value">${failed}</div><div class="stat-label">Failed</div></div>
+          <div class="stat-card"><div class="stat-value">${cc.repliesReceived ?? 0}</div><div class="stat-label">Replies</div></div>
+        </div>`;
+    } else {
+      ccEl.innerHTML = '<p class="hint">No campaign launched yet. Import contacts, then go to Campaign → Start Sending.</p>';
+    }
+  }
 
-  const cc      = d.currentCampaign;
-  const ccStats = cc ? [
-    ['Total Contacts',     cc.totalContacts],
-    ['Valid Numbers',      cc.validNumbers],
-    ['Invalid Numbers',    cc.invalidNumbers],
-    ['Messages Sent',      cc.messagesSent],
-    ['Messages Failed',    cc.messagesFailed],
-    ['Replies Received',   cc.repliesReceived],
-    ['Interested Selling', cc.interestedSelling],
-    ['Interested Renting', cc.interestedRenting],
-    ['Not Interested',     cc.notInterested],
-    ['Opted Out',          cc.optedOut],
-  ] : [];
+  // Active Numbers card
+  const numsEl = document.getElementById('dashboard-numbers');
+  if (numsEl) {
+    const active = (d.byNumber || []).filter(n => n.status === 'connected');
+    if (!active.length) {
+      numsEl.innerHTML = '<p class="hint">No connected numbers. Add a number and scan its QR code.</p>';
+    } else {
+      numsEl.innerHTML = active.map(n => {
+        const pct = n.dailyCap > 0 ? Math.min(100, Math.round((n.sentToday / n.dailyCap) * 100)) : 0;
+        return `<div class="num-live-row">
+          <span class="num-live-dot ${n.paused ? 'paused' : 'active'}"></span>
+          <div class="num-live-info">
+            <span class="num-live-name">${escHtml(n.label)}</span>
+            <div class="num-live-bar-wrap"><div class="num-live-bar" style="width:${pct}%"></div></div>
+          </div>
+          <span class="num-live-count">${n.sentToday}/${n.dailyCap} today${n.paused ? ' · Paused' : ''}</span>
+        </div>`;
+      }).join('');
+    }
+  }
 
-  const ccHtml = cc
-    ? `<h3 style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:10px">Current Campaign: ${cc.name}</h3>
-       <div class="stats-grid">${ccStats.map(([label, num]) => `<div class="stat-card"><div class="stat-value">${num ?? 0}</div><div class="stat-label">${label}</div></div>`).join('')}</div>`
-    : `<h3 style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:8px">Current Campaign</h3><p class="hint">No campaign launched yet.</p>`;
+  // Live Feed card
+  const feedEl = document.getElementById('dashboard-live-feed');
+  if (feedEl) {
+    const activity = d.recentActivity || [];
+    if (!activity.length) {
+      feedEl.innerHTML = '<p class="hint">No sends recorded yet.</p>';
+    } else {
+      feedEl.innerHTML = activity.map(a => `
+        <div class="feed-row">
+          <span class="feed-dot ${a.status === 'sent' ? 'sent' : 'failed'}"></span>
+          <div class="feed-info">
+            <span class="feed-name">${escHtml(a.ownerName)}</span>
+            <span class="feed-phone">${escHtml(a.phone || '')}</span>
+          </div>
+          <span class="feed-number">${escHtml(a.numberLabel || '')}</span>
+          <span class="feed-time">${fmtTime(a.sentAt)}</span>
+        </div>`).join('');
+    }
+  }
 
-  document.getElementById('dashboard').innerHTML = `
-    ${ccHtml}
-    <h3 style="font-size:13px;font-weight:600;color:var(--navy);margin:18px 0 10px">Overall (All Campaigns)</h3>
-    <div class="stats-grid">${stats.map(([label, num]) => `<div class="stat-card"><div class="stat-value">${num ?? 0}</div><div class="stat-label">${label}</div></div>`).join('')}</div>
-    <h3 style="font-size:13px;font-weight:600;color:var(--navy);margin:18px 0 10px">By Number</h3>
-    <table>
-      <tr><th>Number</th><th>Status</th><th>Sends</th><th>Delivered</th><th>Opt-outs</th><th>Today's cap</th><th>Reply rate</th></tr>
-      ${(d.byNumber || []).map(n => `<tr>
-        <td>${n.label}</td>
-        <td>${n.status}${n.paused ? ' (paused)' : ''}</td>
-        <td>${n.sends}</td>
-        <td>${n.delivered}</td>
-        <td>${n.optOuts}</td>
-        <td>${n.sentToday}/${n.dailyCap}</td>
-        <td>${replyRateLabel(n.replyRate)}</td>
-      </tr>`).join('')}
-    </table>`;
+  // Overall stats
+  const overallEl = document.getElementById('dashboard-overall');
+  if (overallEl) {
+    const stats = [
+      ['Total Contacts',     d.totalContacts],
+      ['Messages Sent',      d.messagesSent],
+      ['Messages Failed',    d.messagesFailed],
+      ['Replies',            d.repliesReceived],
+      ['Interested Selling', d.interestedSelling],
+      ['Interested Renting', d.interestedRenting],
+      ['Opted Out',          d.optedOut],
+    ];
+    overallEl.innerHTML = `<div class="stats-grid">${stats.map(([label, num]) =>
+      `<div class="stat-card"><div class="stat-value">${num ?? 0}</div><div class="stat-label">${label}</div></div>`
+    ).join('')}</div>`;
+  }
+
+  // By Number table
+  const byNumEl = document.getElementById('dashboard-by-number');
+  if (byNumEl) {
+    byNumEl.innerHTML = `
+      <table>
+        <tr><th>Number</th><th>Status</th><th>Total Sends</th><th>Delivered</th><th>Opt-outs</th><th>Today</th><th>Reply rate</th></tr>
+        ${(d.byNumber || []).map(n => `<tr>
+          <td>${escHtml(n.label)}</td>
+          <td>${n.status}${n.paused ? ' · Paused' : ''}</td>
+          <td>${n.sends}</td>
+          <td>${n.delivered}</td>
+          <td>${n.optOuts}</td>
+          <td>${n.sentToday}/${n.dailyCap}</td>
+          <td>${replyRateLabel(n.replyRate)}</td>
+        </tr>`).join('')}
+      </table>`;
+  }
 }
 
 // ── Contacts ──────────────────────────────────────────────────────────

@@ -95,7 +95,11 @@
     </div>
 
     <nav class="sidebar-nav">
-      <button class="nav-item active" id="nav-numbers" onclick="navigate('numbers')">
+      <button class="nav-item active" id="nav-dashboard" onclick="navigate('dashboard')">
+        <span class="nav-icon">📊</span>
+        <span class="nav-label">Dashboard</span>
+      </button>
+      <button class="nav-item" id="nav-numbers" onclick="navigate('numbers')">
         <span class="nav-icon">📱</span>
         <span class="nav-label">Numbers</span>
       </button>
@@ -116,10 +120,6 @@
         <span class="nav-icon">⚙️</span>
         <span class="nav-label">Settings</span>
       </button>
-      <button class="nav-item nav-admin-item" id="nav-admin" onclick="navigate('admin')" hidden>
-        <span class="nav-icon">🔐</span>
-        <span class="nav-label">Admin</span>
-      </button>
     </nav>
 
     <div class="sidebar-footer">
@@ -138,8 +138,59 @@
   <!-- Main area -->
   <div class="main-area">
 
+    <!-- Dashboard page -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-header">
+        <div class="page-header-left">
+          <h1>Dashboard</h1>
+          <p class="page-subtitle">Live campaign progress and outreach statistics</p>
+        </div>
+      </div>
+      <div class="page-body">
+
+        <div class="dash-top-row">
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">Current Campaign</h2>
+            </div>
+            <div id="dashboard-current-campaign">
+              <p class="hint">No campaign launched yet.</p>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">Active Numbers</h2>
+            </div>
+            <div id="dashboard-numbers">
+              <p class="hint">Loading…</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header">
+            <h2 class="card-title">Live Send Activity</h2>
+            <span style="font-size:11.5px;color:var(--text-muted)">Updates every 8 s</span>
+          </div>
+          <div id="dashboard-live-feed">
+            <p class="hint">Sends will appear here in real time once a campaign is running.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">All-Time Overview</h2>
+          </div>
+          <div id="dashboard-overall"></div>
+          <h3 style="font-size:13px;font-weight:600;color:var(--navy);margin:20px 0 10px">By Number</h3>
+          <div id="dashboard-by-number"></div>
+        </div>
+
+      </div>
+    </div>
+
     <!-- Numbers page -->
-    <div class="page active" id="page-numbers">
+    <div class="page" id="page-numbers">
       <div class="page-header">
         <div class="page-header-left">
           <h1>WhatsApp Numbers</h1>
@@ -165,26 +216,7 @@
       <div class="page-header">
         <div class="page-header-left">
           <h1>Contacts <span class="count-badge" id="contacts-count"></span></h1>
-          <p class="page-subtitle">All imported owner contacts and their outreach status</p>
-        </div>
-        <div class="header-actions">
-          <button class="btn-ghost" onclick="clearInvalidContacts()">Remove Invalid</button>
-          <button class="btn-danger" onclick="clearAllContacts()">Clear All</button>
-        </div>
-      </div>
-      <div class="page-body">
-        <div class="card table-card">
-          <div id="contacts-table"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Campaign page -->
-    <div class="page" id="page-campaign">
-      <div class="page-header">
-        <div class="page-header-left">
-          <h1>Campaign</h1>
-          <p class="page-subtitle">Import contacts, assign to numbers and launch outreach</p>
+          <p class="page-subtitle">Import, upload, and manage your outreach contacts</p>
         </div>
       </div>
       <div class="page-body">
@@ -250,8 +282,41 @@
           <div id="import-result"></div>
         </div>
 
-        <!-- Launch section -->
+        <!-- Contacts table -->
+        <div class="card table-card">
+          <div class="card-header" style="padding:14px 18px">
+            <h2 class="card-title">All Contacts</h2>
+          </div>
+          <div id="contacts-table"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Campaign page -->
+    <div class="page" id="page-campaign">
+      <div class="page-header">
+        <div class="page-header-left">
+          <h1>Campaign</h1>
+          <p class="page-subtitle">Configure message templates and launch outreach</p>
+        </div>
+      </div>
+      <div class="page-body">
+
+        <!-- Templates section -->
         <div class="card" style="margin-bottom:16px">
+          <div class="card-header">
+            <h2 class="card-title">Message Templates</h2>
+          </div>
+          <div id="template-editor"></div>
+          <div class="form-row" style="margin-top:14px">
+            <button class="btn-primary" onclick="saveTemplates()">Save Templates</button>
+          </div>
+          <div id="templates-result"></div>
+        </div>
+
+        <!-- Launch section -->
+        <div class="card">
           <div class="card-header">
             <h2 class="card-title">Launch</h2>
           </div>
@@ -262,14 +327,6 @@
             <button class="btn-danger" onclick="stopCampaign()">■ Stop All</button>
           </div>
           <div id="assign-result"></div>
-        </div>
-
-        <!-- Dashboard section -->
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">Dashboard</h2>
-          </div>
-          <div id="dashboard"></div>
         </div>
 
       </div>
@@ -297,7 +354,7 @@
       <div class="page-header">
         <div class="page-header-left">
           <h1>Settings</h1>
-          <p class="page-subtitle">Configure sending delay, CRM integration and message templates</p>
+          <p class="page-subtitle">Configure sending delay and CRM integration</p>
         </div>
         <button class="btn-primary" onclick="saveSettings()">Save Settings</button>
       </div>
@@ -331,65 +388,43 @@
           </div>
         </div>
 
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">Message Templates</h2>
-          </div>
-          <div id="template-editor"></div>
-          <div class="form-row" style="margin-top:14px">
-            <button class="btn-primary" onclick="saveTemplates()">Save Templates</button>
-          </div>
-          <div id="templates-result"></div>
-        </div>
+        <!-- User Management — admin only -->
+        <details id="settings-admin-section" class="admin-details" hidden>
+          <summary>User Management <span class="admin-badge">Admin only</span></summary>
+          <div class="admin-section-body">
 
-      </div>
-    </div>
+            <div>
+              <h3 style="font-size:14px;font-weight:600;color:var(--navy);margin-bottom:12px">All Users</h3>
+              <div id="users-list"></div>
+            </div>
 
-    <!-- Admin page -->
-    <div class="page" id="page-admin">
-      <div class="page-header">
-        <div class="page-header-left">
-          <h1>User Management</h1>
-          <p class="page-subtitle">Admin only — manage user accounts and permissions</p>
-        </div>
-      </div>
-      <div class="page-body">
+            <div>
+              <h3 style="font-size:14px;font-weight:600;color:var(--navy);margin-bottom:8px">Add New User</h3>
+              <p class="hint" style="margin-bottom:10px">The user can change their password after first login.</p>
+              <div class="form-row">
+                <input id="new-user-email" type="email" placeholder="colleague@drivenproperties.com" style="flex:2;min-width:200px" />
+                <input id="new-user-password" type="password" placeholder="Temporary password (min 8 chars)" style="flex:2;min-width:180px" />
+                <select id="new-user-role" class="select-input">
+                  <option value="user">User</option>
+                  <option value="admin">Admin</option>
+                </select>
+                <button class="btn-primary" onclick="createUser()">Add User</button>
+              </div>
+              <div id="user-result"></div>
+            </div>
 
-        <div class="card" style="margin-bottom:16px">
-          <div class="card-header">
-            <h2 class="card-title">All Users</h2>
-          </div>
-          <div id="users-list"></div>
-        </div>
+            <div>
+              <h3 style="font-size:14px;font-weight:600;color:var(--navy);margin-bottom:8px">Reset a User's Password</h3>
+              <div class="form-row">
+                <select id="reset-user-select" class="select-input" style="flex:2"><option value="">— select user —</option></select>
+                <input id="reset-user-password" type="password" placeholder="New password (min 8 chars)" style="flex:2;min-width:180px" />
+                <button class="btn-secondary" onclick="adminResetPassword()">Reset Password</button>
+              </div>
+              <div id="reset-result"></div>
+            </div>
 
-        <div class="card" style="margin-bottom:16px">
-          <div class="card-header">
-            <h2 class="card-title">Add New User</h2>
           </div>
-          <p class="hint">The user can change their password after first login.</p>
-          <div class="form-row">
-            <input id="new-user-email" type="email" placeholder="colleague@drivenproperties.com" style="flex:2;min-width:200px" />
-            <input id="new-user-password" type="password" placeholder="Temporary password (min 8 chars)" style="flex:2;min-width:180px" />
-            <select id="new-user-role" class="select-input">
-              <option value="user">User</option>
-              <option value="admin">Admin</option>
-            </select>
-            <button class="btn-primary" onclick="createUser()">Add User</button>
-          </div>
-          <div id="user-result"></div>
-        </div>
-
-        <div class="card">
-          <div class="card-header">
-            <h2 class="card-title">Reset a User's Password</h2>
-          </div>
-          <div class="form-row">
-            <select id="reset-user-select" class="select-input" style="flex:2"><option value="">— select user —</option></select>
-            <input id="reset-user-password" type="password" placeholder="New password (min 8 chars)" style="flex:2;min-width:180px" />
-            <button class="btn-secondary" onclick="adminResetPassword()">Reset Password</button>
-          </div>
-          <div id="reset-result"></div>
-        </div>
+        </details>
 
       </div>
     </div>

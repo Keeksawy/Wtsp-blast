@@ -591,8 +591,9 @@ def dashboard_route():
     outbound = [m for m in messages if m.get("direction") == "outbound"]
     inbound = [m for m in messages if m.get("direction") == "inbound"]
 
+    numbers = db.get_numbers()
     by_number = []
-    for n in db.get_numbers():
+    for n in numbers:
         sent = [m for m in outbound if m.get("numberId") == n["id"]]
         delivered = [m for m in sent if m.get("status") == "sent"]
         optouts = len([m for m in sent if m.get("resultedInOptOut")])
@@ -632,6 +633,24 @@ def dashboard_route():
             "optedOut": len([c for c in campaign_contacts if c.get("optedOut")]),
         }
 
+    contact_map = {c["contactId"]: c for c in all_contacts}
+    number_map  = {n["id"]: n for n in numbers}
+    recent_sorted = sorted(
+        [m for m in outbound if m.get("createdAt")],
+        key=lambda m: m.get("createdAt", ""),
+        reverse=True
+    )[:15]
+    recent_activity = [
+        {
+            "ownerName":   contact_map.get(m.get("contactId"), {}).get("ownerName", "Unknown"),
+            "phone":       contact_map.get(m.get("contactId"), {}).get("phoneE164", ""),
+            "status":      m.get("status", ""),
+            "numberLabel": number_map.get(m.get("numberId"), {}).get("label", ""),
+            "sentAt":      m.get("createdAt", ""),
+        }
+        for m in recent_sorted
+    ]
+
     return jsonify({
         "totalContacts": len(all_contacts),
         "validNumbers": len([c for c in all_contacts if not c.get("invalidNumber")]),
@@ -647,6 +666,7 @@ def dashboard_route():
         "byNumber": by_number,
         "byVariant": by_variant,
         "currentCampaign": current_campaign,
+        "recentActivity": recent_activity,
     })
 
 @app.route("/api/contacts/<contact_id>/requeue", methods=["POST"])
