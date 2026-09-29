@@ -258,41 +258,73 @@ class NumberSession:
 
             is_pdf = Path(image_path).suffix.lower() == ".pdf"
 
-            # Attach via the file-chooser triggered by the paperclip menu.
-            # IMPORTANT: click the paperclip OUTSIDE expect_file_chooser — the file
-            # chooser is only triggered by the submenu item click, not the paperclip.
-            try:
-                page.locator(
-                    '[data-testid="attach-menu-icon"], '
-                    '[title="Attach"], '
-                    'span[data-icon="attach-menu-background"], '
-                    'div[title="Attach"]'
-                ).first.click()
-                page.wait_for_timeout(600)  # wait for submenu to render
+            _ATTACH_BTN = (
+                '[data-testid="attach-menu-icon"], '
+                'button[aria-label="Attach"], '
+                'div[aria-label="Attach"], '
+                '[title="Attach"], '
+                'span[data-icon="attach-menu-background"]'
+            )
+            _PREVIEW_APPEARED = (
+                '[data-testid="media-upload-dialog"], '
+                '[data-testid="photo-caption"], '
+                'div[data-testid="media-caption-input-container"]'
+            )
 
+            # Approach 1: click paperclip → submenu → capture file chooser
+            attached = False
+            try:
+                page.locator(_ATTACH_BTN).first.click(timeout=5000)
+                page.wait_for_timeout(600)
                 with page.expect_file_chooser(timeout=8000) as fc_info:
                     if is_pdf:
                         page.locator(
                             'li span[data-testid="attach-menu-document-icon"], '
                             '[data-testid="mi-attach-document"], '
                             'li[title="Document"]'
-                        ).first.click()
+                        ).first.click(timeout=5000)
                     else:
                         page.locator(
                             'li span[data-testid="attach-menu-photo-video-icon"], '
                             '[data-testid="mi-attach-photo-video"], '
                             'li[title="Photos & Videos"]'
-                        ).first.click()
+                        ).first.click(timeout=5000)
                 fc_info.value.set_files(image_path)
+                attached = True
+            except Exception as e1:
+                print(f"[send_image] approach 1 failed: {e1}", flush=True)
+
+            # Approach 2: set files directly on the hidden file input
+            if not attached:
+                try:
+                    try:
+                        page.locator(_ATTACH_BTN).first.click(timeout=3000)
+                        page.wait_for_timeout(400)
+                    except Exception:
+                        pass
+                    if is_pdf:
+                        fi = page.locator('input[type="file"]:not([accept*="image"])').first
+                    else:
+                        fi = page.locator('input[type="file"][accept*="image"]').first
+                    fi.set_input_files(image_path, timeout=5000)
+                    attached = True
+                except Exception as e2:
+                    print(f"[send_image] approach 2 failed: {e2}", flush=True)
+
+            if not attached:
+                return False, "Could not open file attachment dialog — WhatsApp Web UI may have changed"
+
+            # Verify the media preview appeared. Without this check a failed attach
+            # would silently fall through and send a text-only message marked as "sent".
+            try:
+                page.wait_for_selector(_PREVIEW_APPEARED, timeout=8000)
             except Exception:
-                # Fallback: directly set a hidden file input (visible after the menu opens)
-                file_input = page.locator('input[type="file"]').first
-                file_input.set_input_files(image_path)
+                return False, (
+                    f"File attachment failed — preview did not appear "
+                    f"({'PDF' if is_pdf else 'image'} may be rejected by WhatsApp or attach selectors are stale)"
+                )
 
-            # Wait for the image preview dialog to appear
-            page.wait_for_timeout(2500)
-
-            # Type caption in the caption input (the editable area in the media dialog)
+            # Type caption
             if caption:
                 caption_box = page.locator(
                     'div[data-testid="media-caption-input-container"] div[contenteditable],'
@@ -305,7 +337,7 @@ class NumberSession:
                     caption_box.click()
                     caption_box.type(caption, delay=20)
                 except Exception:
-                    pass  # caption not critical — image will still send without it
+                    pass
 
             # Send
             send_btn = page.locator(SELECTORS["send_button"]).last
