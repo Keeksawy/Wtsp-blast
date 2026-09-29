@@ -258,7 +258,9 @@ class NumberSession:
 
             is_pdf = Path(image_path).suffix.lower() == ".pdf"
 
+            # "clip" is the current WA Web data-icon; older variants kept as fallbacks
             _ATTACH_BTN = (
+                'span[data-icon="clip"], '
                 '[data-testid="attach-menu-icon"], '
                 'button[aria-label="Attach"], '
                 'div[aria-label="Attach"], '
@@ -271,43 +273,55 @@ class NumberSession:
                 'div[data-testid="media-caption-input-container"]'
             )
 
-            # Approach 1: click paperclip → submenu → capture file chooser
+            # Approach 1: click paperclip → wait for menu → capture file chooser
             attached = False
             try:
-                page.locator(_ATTACH_BTN).first.click(timeout=5000)
+                attach_loc = page.locator(_ATTACH_BTN).first
+                attach_loc.wait_for(state="visible", timeout=5000)
+                attach_loc.click()
                 page.wait_for_timeout(600)
+                if is_pdf:
+                    menu_item = page.locator(
+                        'span[data-icon="attach-document"], '
+                        'li span[data-testid="attach-menu-document-icon"], '
+                        '[data-testid="mi-attach-document"], '
+                        'li[title="Document"], '
+                        'li[aria-label*="Document" i]'
+                    ).first
+                else:
+                    menu_item = page.locator(
+                        'span[data-icon="attach-image"], '
+                        'li span[data-testid="attach-menu-photo-video-icon"], '
+                        '[data-testid="mi-attach-photo-video"], '
+                        'li[title="Photos & Videos"], '
+                        'li[aria-label*="Photo" i]'
+                    ).first
                 with page.expect_file_chooser(timeout=8000) as fc_info:
-                    if is_pdf:
-                        page.locator(
-                            'li span[data-testid="attach-menu-document-icon"], '
-                            '[data-testid="mi-attach-document"], '
-                            'li[title="Document"]'
-                        ).first.click(timeout=5000)
-                    else:
-                        page.locator(
-                            'li span[data-testid="attach-menu-photo-video-icon"], '
-                            '[data-testid="mi-attach-photo-video"], '
-                            'li[title="Photos & Videos"]'
-                        ).first.click(timeout=5000)
+                    menu_item.click(timeout=5000)
                 fc_info.value.set_files(image_path)
                 attached = True
             except Exception as e1:
                 print(f"[send_image] approach 1 failed: {e1}", flush=True)
 
-            # Approach 2: set files directly on the hidden file input
+            # Approach 2: set_input_files on all hidden file inputs in the DOM
             if not attached:
                 try:
                     try:
                         page.locator(_ATTACH_BTN).first.click(timeout=3000)
-                        page.wait_for_timeout(400)
+                        page.wait_for_timeout(500)
                     except Exception:
                         pass
-                    if is_pdf:
-                        fi = page.locator('input[type="file"]:not([accept*="image"])').first
-                    else:
-                        fi = page.locator('input[type="file"][accept*="image"]').first
-                    fi.set_input_files(image_path, timeout=5000)
-                    attached = True
+                    all_inputs = page.locator('input[type="file"]').all()
+                    print(f"[send_image] approach 2: found {len(all_inputs)} file input(s)", flush=True)
+                    for fi in all_inputs:
+                        try:
+                            fi.set_input_files(image_path, timeout=3000)
+                            attached = True
+                            break
+                        except Exception:
+                            continue
+                    if not attached:
+                        raise Exception("no file input accepted the file")
                 except Exception as e2:
                     print(f"[send_image] approach 2 failed: {e2}", flush=True)
 
