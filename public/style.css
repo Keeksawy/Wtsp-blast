@@ -985,6 +985,17 @@ tr:hover td { background: var(--bg); }
 .feed-info { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .feed-name  { font-weight: 500; color: var(--text); margin-right: 6px; }
 .feed-phone { font-size: 11.5px; color: var(--text-muted); }
+.feed-template {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 10px;
+  background: var(--gold-light);
+  color: var(--warning);
+  border: 1px solid var(--gold-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
 .feed-number { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; }
 .feed-time   { font-size: 11px; color: var(--text-light); white-space: nowrap; flex-shrink: 0; }
 

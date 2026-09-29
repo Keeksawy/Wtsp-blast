@@ -684,6 +684,7 @@ async function refreshDashboard() {
             <span class="feed-name">${escHtml(a.ownerName)}</span>
             <span class="feed-phone">${escHtml(a.phone || '')}</span>
           </div>
+          ${a.templateId ? `<span class="feed-template" title="${escHtml(a.templateName)}">Template ${escHtml(a.templateId)}</span>` : ''}
           <span class="feed-number">${escHtml(a.numberLabel || '')}</span>
           <span class="feed-time">${fmtTime(a.sentAt)}</span>
         </div>`).join('');

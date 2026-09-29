@@ -649,13 +649,16 @@ def dashboard_route():
         key=lambda m: m.get("createdAt", ""),
         reverse=True
     )[:15]
+    TEMPLATE_NAMES = {"A": "Direct", "B": "Question-first", "C": "Market-context", "D": "Short", "E": "Courtesy"}
     recent_activity = [
         {
-            "ownerName":   contact_map.get(m.get("contactId"), {}).get("ownerName", "Unknown"),
-            "phone":       contact_map.get(m.get("contactId"), {}).get("phoneE164", ""),
-            "status":      m.get("status", ""),
-            "numberLabel": number_map.get(m.get("numberId"), {}).get("label", ""),
-            "sentAt":      m.get("createdAt", ""),
+            "ownerName":    contact_map.get(m.get("contactId"), {}).get("ownerName", "Unknown"),
+            "phone":        contact_map.get(m.get("contactId"), {}).get("phoneE164", ""),
+            "status":       m.get("status", ""),
+            "numberLabel":  number_map.get(m.get("numberId"), {}).get("label", ""),
+            "sentAt":       m.get("createdAt", ""),
+            "templateId":   m.get("templateId", ""),
+            "templateName": TEMPLATE_NAMES.get(m.get("templateId", ""), ""),
         }
         for m in recent_sorted
     ]
