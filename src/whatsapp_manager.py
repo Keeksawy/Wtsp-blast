@@ -356,22 +356,27 @@ class NumberSession:
                     f"({'PDF' if is_pdf else 'image'} may be rejected by WhatsApp or selectors are stale)"
                 )
 
-            # Type caption
+            # Type caption — try dialog-specific selectors first; footer is last resort
             if caption:
-                caption_box = page.locator(
-                    'div[data-testid="media-caption-input-container"] div[contenteditable],'
-                    'div[aria-label*="caption" i],'
-                    'div[data-testid="photo-caption"] div[contenteditable],'
-                    'footer div[contenteditable]'
-                ).last
-                try:
-                    caption_box.wait_for(state="visible", timeout=5000)
-                    caption_box.click()
-                    caption_box.type(caption, delay=20)
-                except Exception:
-                    pass
+                _CAPTION_SELECTORS = [
+                    'div[data-testid="media-caption-input-container"] div[contenteditable]',
+                    '[data-testid="document-upload-dialog"] div[contenteditable]',
+                    '[data-testid="media-upload-dialog"] div[contenteditable]',
+                    'div[aria-label*="caption" i]',
+                    'div[data-testid="photo-caption"] div[contenteditable]',
+                    'footer div[contenteditable]',
+                ]
+                for _sel in _CAPTION_SELECTORS:
+                    try:
+                        _loc = page.locator(_sel).last
+                        if _loc.count() > 0 and _loc.is_visible(timeout=2000):
+                            _loc.click()
+                            _loc.type(caption, delay=20)
+                            break
+                    except Exception:
+                        continue
 
-            # Send — try selector first, fall back to Enter key (works in all WA Web versions)
+            # Send — three escalating approaches; never fall back to the main compose box
             _SEND_BTN = (
                 'button[data-testid="send"], '
                 'div[data-testid="send"], '
@@ -380,21 +385,48 @@ class NumberSession:
                 'span[data-icon="send"]'
             )
             sent = False
+
+            # Approach A: Playwright selector
             try:
                 send_btn = page.locator(_SEND_BTN).last
                 send_btn.wait_for(state="visible", timeout=5000)
                 send_btn.click()
                 sent = True
             except Exception as e_btn:
-                print(f"[send_image] send button not found ({e_btn}), trying Enter key", flush=True)
+                print(f"[send_image] send button selector failed ({e_btn}), trying JS click", flush=True)
 
+            # Approach B: JavaScript click — handles any icon variant (send-light, send-white, etc.)
             if not sent:
-                # Fallback: focus the compose box and press Enter
                 try:
-                    page.locator(SELECTORS["compose_box"]).last.click(timeout=3000)
+                    result = page.evaluate("""() => {
+                        for (const span of [...document.querySelectorAll('span[data-icon]')].reverse()) {
+                            if (!span.dataset.icon.includes('send')) continue;
+                            const btn = span.closest('button') || span.closest('[role="button"]');
+                            if (!btn) continue;
+                            const r = btn.getBoundingClientRect();
+                            if (r.width > 0) { btn.click(); return 'icon:' + span.dataset.icon; }
+                        }
+                        for (const el of [...document.querySelectorAll('[aria-label]')].reverse()) {
+                            if (!(el.getAttribute('aria-label') || '').toLowerCase().includes('send')) continue;
+                            const r = el.getBoundingClientRect();
+                            if (r.width > 0) { el.click(); return 'aria:' + el.getAttribute('aria-label'); }
+                        }
+                        return null;
+                    }""")
+                    if result:
+                        print(f"[send_image] sent via JS: {result}", flush=True)
+                        sent = True
+                except Exception as e_js:
+                    print(f"[send_image] JS click failed: {e_js}", flush=True)
+
+            # Approach C: Enter key — only if the upload dialog is still open
+            if not sent:
+                try:
+                    if page.locator(_PREVIEW_APPEARED).count() > 0:
+                        page.keyboard.press("Enter")
+                        print("[send_image] tried Enter key in dialog", flush=True)
                 except Exception:
                     pass
-                page.keyboard.press("Enter")
 
             page.wait_for_timeout(2000)
 
