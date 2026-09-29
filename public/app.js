@@ -278,16 +278,18 @@ async function resetCampaignData() {
 // ── Settings ─────────────────────────────────────────────────────────
 async function refreshSettings() {
   const s = await jget('/api/settings');
+  const active = document.activeElement;
   const minEl     = document.getElementById('delay-min');
   const maxEl     = document.getElementById('delay-max');
   const crmEl     = document.getElementById('crm-webhook-url');
   const coEl      = document.getElementById('company-name');
   const agentEl   = document.getElementById('default-agent-name');
-  if (minEl)   minEl.value   = s.delayMinSeconds;
-  if (maxEl)   maxEl.value   = s.delayMaxSeconds;
-  if (crmEl)   crmEl.value   = s.crmWebhookUrl     || '';
-  if (coEl)    coEl.value    = s.companyName        || '';
-  if (agentEl) agentEl.value = s.defaultAgentName   || '';
+  // Don't overwrite a field the user is actively typing in
+  if (minEl   && active !== minEl)   minEl.value   = s.delayMinSeconds;
+  if (maxEl   && active !== maxEl)   maxEl.value   = s.delayMaxSeconds;
+  if (crmEl   && active !== crmEl)   crmEl.value   = s.crmWebhookUrl     || '';
+  if (coEl    && active !== coEl)    coEl.value    = s.companyName        || '';
+  if (agentEl && active !== agentEl) agentEl.value = s.defaultAgentName   || '';
 }
 
 async function saveSettings() {
