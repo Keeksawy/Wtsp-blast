@@ -371,27 +371,31 @@ class NumberSession:
                 except Exception:
                     pass
 
-            # Send — use a broad selector covering both the compose and media-preview send buttons
+            # Send — try selector first, fall back to Enter key (works in all WA Web versions)
             _SEND_BTN = (
                 'button[data-testid="send"], '
                 'div[data-testid="send"], '
-                'span[data-testid="send"], '
+                '[role="button"][aria-label="Send"], '
                 'button[aria-label="Send"], '
                 'span[data-icon="send"]'
             )
-            send_btn = page.locator(_SEND_BTN).last
+            sent = False
             try:
-                send_btn.wait_for(state="visible", timeout=10000)
-            except Exception:
+                send_btn = page.locator(_SEND_BTN).last
+                send_btn.wait_for(state="visible", timeout=5000)
+                send_btn.click()
+                sent = True
+            except Exception as e_btn:
+                print(f"[send_image] send button not found ({e_btn}), trying Enter key", flush=True)
+
+            if not sent:
+                # Fallback: focus the compose box and press Enter
                 try:
-                    page.screenshot(path=str(_debug_dir / "debug_send_fail.png"))
-                    print("[send_image] screenshot saved: debug_send_fail.png", flush=True)
-                    btns = page.evaluate("() => [...document.querySelectorAll('button,span[data-icon]')].map(el=>el.outerHTML.slice(0,120))")
-                    print(f"[send_image] visible buttons/icons: {btns[:20]}", flush=True)
+                    page.locator(SELECTORS["compose_box"]).last.click(timeout=3000)
                 except Exception:
                     pass
-                raise
-            send_btn.click()
+                page.keyboard.press("Enter")
+
             page.wait_for_timeout(2000)
 
             page.goto("https://web.whatsapp.com", timeout=30000)
