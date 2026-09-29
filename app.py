@@ -759,22 +759,36 @@ def inbox_route():
         if not threads[key]["lastMessageAt"] or m.get("createdAt", "") > threads[key]["lastMessageAt"]:
             threads[key]["lastMessageAt"] = m.get("createdAt")
 
-    # Mark threads where last message is inbound and count consecutive trailing inbound messages
+    # Mark threads where last message is inbound and count unread since last read
     for t in threads.values():
         sorted_msgs = sorted(t["messages"], key=lambda x: x.get("createdAt", ""))
         t["messages"] = sorted_msgs
-        # Count inbound messages since the last outbound (= unread streak)
-        unread = 0
-        for m in reversed(sorted_msgs):
-            if m.get("direction") == "inbound":
-                unread += 1
-            else:
-                break
+        contact = contacts_map.get(t.get("contactId"))
+        last_read_at = (contact or {}).get("lastInboxReadAt") or ""
+        unread = sum(
+            1 for m in sorted_msgs
+            if m.get("direction") == "inbound" and m.get("createdAt", "") > last_read_at
+        )
         t["unreadCount"] = unread
         t["hasUnreplied"] = unread > 0
 
     result = sorted(threads.values(), key=lambda x: x.get("lastMessageAt") or "", reverse=True)
     return jsonify(result)
+
+
+@app.route("/api/inbox/read/<contact_id>", methods=["POST"])
+def inbox_mark_read(contact_id):
+    """Mark all messages in a thread as read by recording the current timestamp."""
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+    import datetime
+    now = datetime.datetime.utcnow().isoformat() + "Z"
+    try:
+        db.update_contact(contact_id, {"lastInboxReadAt": now})
+    except ValueError:
+        pass
+    return jsonify({"ok": True})
 
 
 @app.route("/api/inbox/reply", methods=["POST"])

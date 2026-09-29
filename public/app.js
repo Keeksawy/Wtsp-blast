@@ -875,6 +875,8 @@ function openConversation(contactId) {
   _selectedConvId = contactId;
   renderInboxConversations(); // re-render to update active highlight
   renderInboxThread(contactId);
+  // Mark all messages in this thread as read
+  jpost('/api/inbox/read/' + contactId, {}).then(() => refreshInbox());
 }
 
 function renderInboxThread(contactId) {

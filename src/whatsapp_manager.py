@@ -487,15 +487,54 @@ class NumberSession:
 
             print(f"[inbound scan] phone={chat_phone_e164} name={chat_name}", flush=True)
 
-            # Collect known outbound bodies so we can exclude them from the scraped list
+            # Collect outbound texts visible ON the page so we can exclude them.
+            # This catches manually-sent WhatsApp messages that are not in the DB.
+            page_outbound = set()
+            for sel in [
+                "div.message-out span.selectable-text",
+                "div[class*='message-out'] span[class*='selectable-text']",
+                "div[class*='message-out'] span[dir='ltr']",
+            ]:
+                els = page.locator(sel)
+                if els.count() > 0:
+                    for i in range(min(els.count(), 30)):
+                        try:
+                            t = els.nth(i).inner_text(timeout=1000).strip()
+                            if t:
+                                page_outbound.add(t)
+                        except Exception:
+                            pass
+                    if page_outbound:
+                        break
+
+            # Collect known outbound bodies from DB as a second exclusion layer.
             known_outbound = set()
             for m in db.get_messages(direction="outbound"):
                 if m.get("body"):
                     known_outbound.add(m["body"].strip())
 
+            def _clean_body(raw):
+                """Strip trailing WhatsApp timestamp (e.g. '\\n11:35') from scraped text."""
+                import re as _re
+                return _re.sub(r"\n\d{1,2}:\d{2}(?:\s*(?:AM|PM))?\s*$", "", raw).strip()
+
+            def _is_outbound(text):
+                clean = _clean_body(text)
+                if clean in page_outbound:
+                    return True
+                if any(
+                    clean.startswith(ob[:40]) or ob.startswith(clean[:40])
+                    for ob in page_outbound if len(ob) > 5
+                ):
+                    return True
+                if any(
+                    clean.startswith(ob[:40]) or ob.startswith(clean[:40])
+                    for ob in known_outbound if len(ob) > 5
+                ):
+                    return True
+                return False
+
             # Strategy 1: inbound-specific selectors (class-based).
-            # Target the selectable-text CONTAINER, not its child spans, so
-            # inner_text() returns the full multi-line message body.
             all_bodies = []
             for sel in [
                 "div.message-in span.selectable-text",
@@ -506,15 +545,15 @@ class NumberSession:
                 if els.count() > 0:
                     for i in range(min(els.count(), 10)):
                         try:
-                            t = els.nth(i).inner_text(timeout=1000).strip()
-                            if t:
+                            t = _clean_body(els.nth(i).inner_text(timeout=1000))
+                            if t and not _is_outbound(t):
                                 all_bodies.append(t)
                         except Exception:
                             pass
                     if all_bodies:
                         break
 
-            # Strategy 2: read full message container text, filter out known outbound
+            # Strategy 2: generic containers, exclude anything identified as outbound.
             if not all_bodies:
                 containers = page.locator("[data-testid='msg-container']")
                 cnt = containers.count()
@@ -524,20 +563,9 @@ class NumberSession:
                         full_text = containers.nth(i).inner_text(timeout=1000).strip()
                         if not full_text:
                             continue
-                        # Refresh known_outbound each iteration to catch opt-out confirmations
-                        known_outbound = set(
-                            m["body"].strip() for m in db.get_messages(direction="outbound") if m.get("body")
-                        )
-                        # Check if this container's text starts with any known outbound body
-                        is_outbound = any(
-                            full_text.startswith(ob[:40]) or ob.startswith(full_text[:40])
-                            for ob in known_outbound if len(ob) > 5
-                        )
-                        if not is_outbound:
-                            # Keep the full message — multi-line replies must not be truncated
-                            body = full_text
-                            if body and len(body) > 1:
-                                all_bodies.append(body)
+                        body = _clean_body(full_text)
+                        if body and len(body) > 1 and not _is_outbound(full_text):
+                            all_bodies.append(body)
                     except Exception:
                         pass
 
