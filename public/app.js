@@ -988,7 +988,6 @@ function refreshAll() {
   refreshDashboard();
   refreshContacts();
   refreshInbox();
-  refreshTemplates();
 }
 
 setInterval(refreshAll, 8000);
