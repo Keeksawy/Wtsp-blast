@@ -358,14 +358,49 @@ class NumberSession:
 
             # Verify the media preview appeared. Without this check a failed attach
             # would silently fall through and send a text-only message marked as "sent".
+            preview_found = False
             try:
                 page.wait_for_selector(_PREVIEW_APPEARED, timeout=10000)
+                preview_found = True
             except Exception:
+                pass
+
+            if not preview_found and not is_pdf:
+                # WhatsApp's image editor (for JPG/PNG) replaces the right-panel header
+                # with a dense editing toolbar — none of the CSS preview selectors match it.
+                # Normal chat header has ~4 icons (video, voice, search, menu) at x>500 top;
+                # the image editor toolbar has 10+ icons there.
+                try:
+                    preview_found = page.evaluate("""() => {
+                        const spans = [...document.querySelectorAll('span[data-icon]')];
+                        const topRight = spans.filter(s => {
+                            const r = s.getBoundingClientRect();
+                            return r.top < 130 && r.left > 500 && r.width > 0;
+                        });
+                        console.log('[WA image editor check] topRight icons:', topRight.map(s => s.dataset.icon).join(','));
+                        return topRight.length >= 6;
+                    }""")
+                    if preview_found:
+                        print("[send_image] image editor detected via icon-count fallback", flush=True)
+                except Exception as _je:
+                    print(f"[send_image] JS editor-detection failed: {_je}", flush=True)
+
+            if not preview_found:
+                try:
+                    import json as _json
+                    icons_info = page.evaluate(
+                        "() => [...document.querySelectorAll('span[data-icon]')].map(s => "
+                        "({icon: s.dataset.icon, top: Math.round(s.getBoundingClientRect().top), "
+                        "left: Math.round(s.getBoundingClientRect().left)}))"
+                    )
+                    with open(str(_debug_dir / "debug_icons.json"), "w") as _f:
+                        _json.dump(icons_info, _f, indent=2)
+                    print(f"[send_image] saved {len(icons_info)} icon positions to debug_icons.json", flush=True)
+                except Exception:
+                    pass
                 try:
                     page.screenshot(path=str(_debug_dir / "debug_preview_fail.png"))
                     print("[send_image] screenshot saved: debug_preview_fail.png", flush=True)
-                    btns = page.evaluate("() => [...document.querySelectorAll('button,span[data-icon]')].map(el=>el.outerHTML.slice(0,120))")
-                    print(f"[send_image] visible buttons/icons: {btns[:20]}", flush=True)
                 except Exception:
                     pass
                 return False, (
