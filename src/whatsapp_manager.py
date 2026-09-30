@@ -256,7 +256,24 @@ class NumberSession:
             if invalid.count() > 0 and invalid.first.is_visible(timeout=3000):
                 return False, "WhatsApp reports this number is invalid or not on WhatsApp"
 
-            is_pdf = Path(image_path).suffix.lower() == ".pdf"
+            ext = Path(image_path).suffix.lower()
+            # AVIF images trigger WhatsApp's full image editor which our selectors
+            # don't detect. Convert to JPEG first using macOS sips (always available).
+            if ext == ".avif":
+                import subprocess as _sp
+                jpeg_path = Path(image_path).with_suffix(".jpg")
+                try:
+                    _sp.run(
+                        ["sips", "-s", "format", "jpeg", str(image_path), "--out", str(jpeg_path)],
+                        capture_output=True, timeout=30, check=True,
+                    )
+                    if jpeg_path.exists():
+                        image_path = str(jpeg_path)
+                        ext = ".jpg"
+                        print(f"[send_image] converted AVIF → JPEG: {jpeg_path}", flush=True)
+                except Exception as _e:
+                    print(f"[send_image] AVIF conversion failed ({_e}), sending original", flush=True)
+            is_pdf = ext == ".pdf"
 
             # "clip" is the current WA Web data-icon; older variants kept as fallbacks
             _ATTACH_BTN = (
