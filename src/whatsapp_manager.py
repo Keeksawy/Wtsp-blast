@@ -198,10 +198,29 @@ class NumberSession:
             except Exception:
                 pass
 
-            # WhatsApp shows a modal if the number isn't on WhatsApp / phone format is invalid
+            # WhatsApp shows a modal if the number isn't on WhatsApp / phone format is invalid.
+            # The same data-animate-modal-popup selector also matches "Open chat?" confirmation
+            # dialogs for numbers not in your contacts — those must be clicked through, not
+            # treated as failures. Read the modal text to distinguish the two cases.
             invalid = page.locator(SELECTORS["invalid_number_dialog"])
             if invalid.count() > 0 and invalid.first.is_visible(timeout=3000):
-                return False, "WhatsApp reports this number is invalid or not on WhatsApp"
+                modal_text = ""
+                try:
+                    modal_text = invalid.first.inner_text(timeout=2000).lower()
+                except Exception:
+                    pass
+                _invalid_kw = ("invalid", "not on whatsapp", "not registered", "doesn't use")
+                if any(kw in modal_text for kw in _invalid_kw):
+                    return False, "WhatsApp reports this number is invalid or not on WhatsApp"
+                # Different dialog (e.g. "Open chat?" confirmation) — click the primary button
+                print(f"[send] dismissing non-invalid modal: {modal_text[:80]!r}", flush=True)
+                try:
+                    ok_btn = invalid.first.locator("button").last
+                    if ok_btn.count() > 0 and ok_btn.is_visible(timeout=1000):
+                        ok_btn.click()
+                        page.wait_for_timeout(800)
+                except Exception:
+                    pass
 
             box = page.locator(SELECTORS["compose_box"]).last
             try:
@@ -251,10 +270,25 @@ class NumberSession:
             except Exception:
                 pass
 
-            # Check for invalid-number dialog
+            # Check for invalid-number dialog (same guard as _do_send — see comment there)
             invalid = page.locator(SELECTORS["invalid_number_dialog"])
             if invalid.count() > 0 and invalid.first.is_visible(timeout=3000):
-                return False, "WhatsApp reports this number is invalid or not on WhatsApp"
+                modal_text = ""
+                try:
+                    modal_text = invalid.first.inner_text(timeout=2000).lower()
+                except Exception:
+                    pass
+                _invalid_kw = ("invalid", "not on whatsapp", "not registered", "doesn't use")
+                if any(kw in modal_text for kw in _invalid_kw):
+                    return False, "WhatsApp reports this number is invalid or not on WhatsApp"
+                print(f"[send_image] dismissing non-invalid modal: {modal_text[:80]!r}", flush=True)
+                try:
+                    ok_btn = invalid.first.locator("button").last
+                    if ok_btn.count() > 0 and ok_btn.is_visible(timeout=1000):
+                        ok_btn.click()
+                        page.wait_for_timeout(800)
+                except Exception:
+                    pass
 
             ext = Path(image_path).suffix.lower()
             # AVIF images trigger WhatsApp's full image editor which our selectors
