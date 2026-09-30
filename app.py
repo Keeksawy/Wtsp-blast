@@ -444,8 +444,9 @@ _data_root = Path(os.environ.get("WA_DATA_DIR") or (Path(__file__).parent / "dat
 TEMPLATE_IMG_DIR = _data_root / "template_images"
 TEMPLATE_IMG_DIR.mkdir(parents=True, exist_ok=True)
 
-# Images sent via WhatsApp "Photos & Videos"; PDFs/docs via "Document" attachment
-ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".heic", ".heif", ".avif", ".tiff", ".tif"}
+# Only JPEG, PNG, and PDF — other formats (AVIF, HEIC, WebP, GIF, TIFF) cause
+# WhatsApp Web to open a non-standard editor UI that the automation cannot handle.
+ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".png"}
 ALLOWED_DOC_EXTS   = {".pdf"}
 ALLOWED_MEDIA_EXTS = ALLOWED_IMAGE_EXTS | ALLOWED_DOC_EXTS
 

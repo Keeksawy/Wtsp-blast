@@ -269,7 +269,19 @@ async function resetCampaignData() {
   el.textContent = 'Resetting…';
   const r = await jpost('/api/reset', {});
   if (r.ok) {
-    el.innerHTML = '<span style="color:green">&#10003; Reset complete. Reload the page to see the clean state.</span>';
+    el.innerHTML = '<span style="color:green">&#10003; Reset complete.</span>';
+    // Clear all in-memory state immediately so the UI reflects the empty database
+    _inboxData     = [];
+    _selectedConvId = null;
+    const thread = document.getElementById('inbox-thread');
+    if (thread) thread.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted)">No messages yet.</div>';
+    // Refresh all panels
+    refreshNumbers();
+    refreshDashboard();
+    refreshContacts();
+    if (_currentPage === 'inbox') {
+      renderInboxConversations();
+    }
   } else {
     el.innerHTML = `<span style="color:#b00">${r.error || 'Reset failed.'}</span>`;
   }
@@ -340,10 +352,11 @@ async function refreshTemplates() {
             }
             <button type="button" class="btn-ghost btn-sm" onclick="removeTemplateImage('${tpl.id}')">✕ Remove</button>
           ` : `
-            <label class="btn-ghost btn-sm tpl-upload-label">
+            <label class="btn-ghost btn-sm tpl-upload-label" title="Accepted: JPG, PNG, PDF">
               ⬆ Upload image or PDF
-              <input type="file" accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.bmp,.heic,.heif,.avif,.tiff,.tif" style="display:none" onchange="uploadTemplateImage('${tpl.id}', this)">
+              <input type="file" accept=".jpg,.jpeg,.png,.pdf" style="display:none" onchange="uploadTemplateImage('${tpl.id}', this)">
             </label>
+            <span class="hint" style="font-size:11px;margin-left:4px">JPG · PNG · PDF</span>
           `}
         </div>
       </div>
@@ -369,7 +382,7 @@ async function uploadTemplateImage(templateId, input) {
   });
   const d = await r.json();
   if (d.error) {
-    alert(`Could not attach file:\n\n${d.error}`);
+    alert(`Could not attach file:\n\n${d.error}\n\nAccepted formats: JPG, PNG, PDF`);
     input.value = '';
     return;
   }
