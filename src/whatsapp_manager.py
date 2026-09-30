@@ -35,7 +35,7 @@ SELECTORS = {
     "qr_canvas": "canvas[aria-label], div[data-ref] canvas",
     "chat_list_ready": "#pane-side, div[aria-label='Chat list']",
     "compose_box": "footer div[contenteditable='true'][data-tab]",
-    "send_button": "button[aria-label='Send'], span[data-icon='send']",
+    "send_button": "button[aria-label='Send'], span[data-icon='send'], span[data-icon='wds-ic-send-filled'], span[data-icon='send-light'], span[data-icon='send-white']",
     "unread_chat_rows": "#pane-side div[aria-testid='cell-frame-container']",
     "unread_badge": "span[aria-label*='unread']",
     # Multiple fallback selectors for inbound messages — WhatsApp changes class names periodically
@@ -309,8 +309,9 @@ class NumberSession:
                     print(f"[send_image] AVIF conversion failed ({_e}), sending original", flush=True)
             is_pdf = ext == ".pdf"
 
-            # "clip" is the current WA Web data-icon; older variants kept as fallbacks
+            # WA Web has cycled through several icon names; keep all known variants
             _ATTACH_BTN = (
+                'span[data-icon="ic-attach-file"], '
                 'span[data-icon="clip"], '
                 '[data-testid="attach-menu-icon"], '
                 'button[aria-label="Attach"], '
@@ -338,6 +339,8 @@ class NumberSession:
                 if is_pdf:
                     menu_item = page.locator(
                         'span[data-icon="attach-document"], '
+                        'span[data-icon="ic-doc"], '
+                        'span[data-icon="ic-document"], '
                         'li span[data-testid="attach-menu-document-icon"], '
                         '[data-testid="mi-attach-document"], '
                         'li[title="Document"], '
@@ -346,6 +349,8 @@ class NumberSession:
                 else:
                     menu_item = page.locator(
                         'span[data-icon="attach-image"], '
+                        'span[data-icon="ic-photo-video"], '
+                        'span[data-icon="ic-media"], '
                         'li span[data-testid="attach-menu-photo-video-icon"], '
                         '[data-testid="mi-attach-photo-video"], '
                         'li[title="Photos & Videos"], '
@@ -368,7 +373,15 @@ class NumberSession:
                         pass
                     all_inputs = page.locator('input[type="file"]').all()
                     print(f"[send_image] approach 2: found {len(all_inputs)} file input(s)", flush=True)
-                    for fi in all_inputs:
+                    # For PDFs prefer inputs that accept documents (not photo-only inputs)
+                    if is_pdf:
+                        def _accepts_pdf(fi):
+                            acc = (fi.get_attribute("accept") or "").lower()
+                            return not acc or "pdf" in acc or "*" in acc or "application" in acc
+                        ordered = sorted(all_inputs, key=lambda fi: (0 if _accepts_pdf(fi) else 1))
+                    else:
+                        ordered = all_inputs
+                    for fi in ordered:
                         try:
                             fi.set_input_files(image_path, timeout=3000)
                             attached = True
@@ -399,23 +412,24 @@ class NumberSession:
             except Exception:
                 pass
 
-            if not preview_found and not is_pdf:
-                # WhatsApp's image editor (for JPG/PNG) replaces the right-panel header
-                # with a dense editing toolbar — none of the CSS preview selectors match it.
-                # Normal chat header has ~4 icons (video, voice, search, menu) at x>500 top;
-                # the image editor toolbar has 10+ icons there.
+            if not preview_found:
+                # WhatsApp's image editor (for JPG/PNG) opens instead of the normal
+                # media preview dialog — none of the CSS preview selectors match it.
+                # Detected by the presence of the scissors/crop icon in the top area.
+                # (Icon names confirmed from debug_icons.json: "scissors" + "ic-download".)
                 try:
                     preview_found = page.evaluate("""() => {
+                        const editorIcons = new Set(['scissors', 'ic-download', 'crop', 'media-editor-crop']);
                         const spans = [...document.querySelectorAll('span[data-icon]')];
-                        const topRight = spans.filter(s => {
+                        const found = spans.filter(s => {
                             const r = s.getBoundingClientRect();
-                            return r.top < 130 && r.left > 500 && r.width > 0;
+                            return r.top < 150 && r.width > 0 && editorIcons.has(s.dataset.icon);
                         });
-                        console.log('[WA image editor check] topRight icons:', topRight.map(s => s.dataset.icon).join(','));
-                        return topRight.length >= 6;
+                        console.log('[WA image editor check] editor icons found:', found.map(s => s.dataset.icon).join(','));
+                        return found.length > 0;
                     }""")
                     if preview_found:
-                        print("[send_image] image editor detected via icon-count fallback", flush=True)
+                        print("[send_image] image editor detected (scissors/ic-download icon)", flush=True)
                 except Exception as _je:
                     print(f"[send_image] JS editor-detection failed: {_je}", flush=True)
 
@@ -468,7 +482,10 @@ class NumberSession:
                 'div[data-testid="send"], '
                 '[role="button"][aria-label="Send"], '
                 'button[aria-label="Send"], '
-                'span[data-icon="send"]'
+                'span[data-icon="send"], '
+                'span[data-icon="wds-ic-send-filled"], '
+                'span[data-icon="send-light"], '
+                'span[data-icon="send-white"]'
             )
             sent = False
 
