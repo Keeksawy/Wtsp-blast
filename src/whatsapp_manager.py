@@ -489,6 +489,12 @@ class NumberSession:
             )
             sent = False
 
+            # Screenshot right before sending — confirms what state WA Web is in
+            try:
+                page.screenshot(path=str(_debug_dir / "debug_presend.png"))
+            except Exception:
+                pass
+
             # Approach A: Playwright selector
             try:
                 send_btn = page.locator(_SEND_BTN).last
@@ -531,7 +537,14 @@ class NumberSession:
                 except Exception:
                     pass
 
-            page.wait_for_timeout(2000)
+            # Wait longer for image upload to complete before navigating away
+            page.wait_for_timeout(4000)
+
+            # Screenshot after send — shows whether message appeared in chat
+            try:
+                page.screenshot(path=str(_debug_dir / "debug_postsend.png"))
+            except Exception:
+                pass
 
             page.goto("https://web.whatsapp.com", timeout=30000)
             page.wait_for_timeout(1000)
@@ -678,8 +691,9 @@ class NumberSession:
             _TS_RE = _re.compile(r'^\d{1,2}:\d{2}(?:\s*(?:AM|PM))?\s*$')
             for body in all_bodies:
                 # Skip bare timestamps ("14:59") — these are WhatsApp image-bubble footers
-                # that the scraper picks up as text when no caption text is present.
-                if body and not _TS_RE.match(body) and len(body) > 3:
+                # that the scraper picks up when no caption text is accessible.
+                # The regex is precise enough on its own; no length filter (would drop "Yes").
+                if body and not _TS_RE.match(body):
                     self._handle_inbound(chat_phone_e164, chat_name, body)
         except Exception as e:
             print(f"[inbound scan] error: {e}", flush=True)
