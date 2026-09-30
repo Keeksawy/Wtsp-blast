@@ -674,8 +674,12 @@ class NumberSession:
 
             print(f"[inbound scan] inbound candidates: {all_bodies[-5:] if all_bodies else []}", flush=True)
 
+            import re as _re
+            _TS_RE = _re.compile(r'^\d{1,2}:\d{2}(?:\s*(?:AM|PM))?\s*$')
             for body in all_bodies:
-                if body:
+                # Skip bare timestamps ("14:59") — these are WhatsApp image-bubble footers
+                # that the scraper picks up as text when no caption text is present.
+                if body and not _TS_RE.match(body) and len(body) > 3:
                     self._handle_inbound(chat_phone_e164, chat_name, body)
         except Exception as e:
             print(f"[inbound scan] error: {e}", flush=True)
