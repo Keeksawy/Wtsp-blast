@@ -341,61 +341,10 @@ async function refreshTemplates() {
         <button type="button" onclick="insertVar('tpl-${tpl.id}', '{{Company_Name}}')">+ Company Name</button>
       </div>
       <textarea id="tpl-${tpl.id}" rows="3" style="width:100%;box-sizing:border-box">${tpl.text}</textarea>
-
-      <div class="tpl-image-row">
-        <span class="tpl-image-label">📎 Attach media (optional — sent as the message image/document with text as caption)</span>
-        <div class="tpl-image-controls">
-          ${tpl.hasImage ? `
-            ${tpl.mediaType === 'pdf'
-              ? `<div class="tpl-pdf-preview">📄 PDF attached</div>`
-              : `<img src="${tpl.imageUrl}?v=${Date.now()}" class="tpl-image-preview" alt="Template image" />`
-            }
-            <button type="button" class="btn-ghost btn-sm" onclick="removeTemplateImage('${tpl.id}')">✕ Remove</button>
-          ` : `
-            <label class="btn-ghost btn-sm tpl-upload-label" title="Accepted: JPG, PNG, PDF">
-              ⬆ Upload image or PDF
-              <input type="file" accept=".jpg,.jpeg,.png,.pdf" style="display:none" onchange="uploadTemplateImage('${tpl.id}', this)">
-            </label>
-            <span class="hint" style="font-size:11px;margin-left:4px">JPG · PNG · PDF</span>
-          `}
-        </div>
-      </div>
     </div>
   `).join('');
 }
 
-async function uploadTemplateImage(templateId, input) {
-  const file = input.files[0];
-  if (!file) return;
-
-  // Client-side size guard (WhatsApp limit is 16 MB for media)
-  if (file.size > 16 * 1024 * 1024) {
-    alert('File is too large. WhatsApp supports up to 16 MB for media files.');
-    input.value = '';
-    return;
-  }
-
-  const fd = new FormData();
-  fd.append('image', file);
-  const r = await fetch(`/api/templates/${templateId}/image`, {
-    method: 'POST', body: fd, headers: { 'X-Auth-Token': getToken() }
-  });
-  const d = await r.json();
-  if (d.error) {
-    alert(`Could not attach file:\n\n${d.error}\n\nAccepted formats: JPG, PNG, PDF`);
-    input.value = '';
-    return;
-  }
-  refreshTemplates();
-}
-
-async function removeTemplateImage(templateId) {
-  if (!confirm('Remove the image from this template?')) return;
-  await fetch(`/api/templates/${templateId}/image`, {
-    method: 'DELETE', headers: { 'X-Auth-Token': getToken() }
-  });
-  refreshTemplates();
-}
 
 async function saveTemplates() {
   const ids = ['A', 'B', 'C', 'D', 'E'];
@@ -609,21 +558,6 @@ function cancelImport() {
 
 // ── Campaign start/stop ───────────────────────────────────────────────
 async function startCampaign() {
-  // Pre-flight: check that all template media files are readable
-  const validation = await jget('/api/templates/validate-images');
-  if (validation.issues && validation.issues.length > 0) {
-    const names = { A: 'Direct & professional', B: 'Question-first', C: 'Market-context', D: 'Short & informal', E: 'Courtesy-led' };
-    const lines = validation.issues.map(i => `• Template ${i.templateId} (${names[i.templateId] || i.templateId}): ${i.reason}`).join('\n');
-    document.getElementById('media-issue-body').textContent =
-      `The following template media files have problems and cannot be sent:\n\n${lines}\n\nYou can start without images, or cancel and fix the templates in Campaign first.`;
-    document.getElementById('media-issue-modal').style.display = 'flex';
-    return;
-  }
-  await _doStartCampaign();
-}
-
-async function startCampaignNoImages() {
-  document.getElementById('media-issue-modal').style.display = 'none';
   await _doStartCampaign();
 }
 
@@ -802,7 +736,8 @@ async function refreshContacts() {
                     : c.messageStatus === 'sent'   ? 'pill-sent'
                     : c.messageStatus === 'failed' ? 'pill-failed'
                     : 'pill-pending';
-    const statusLabel = c.invalidNumber ? 'Invalid' : c.optedOut ? 'Opted out' : (c.messageStatus || '—');
+    const _statusMap = { 'not-interested': 'Not Interested', 'do-not-contact': 'Do Not Contact' };
+    const statusLabel = c.invalidNumber ? 'Invalid' : c.optedOut ? 'Opted out' : (_statusMap[c.messageStatus] || c.messageStatus || '—');
     const isFailed    = c.messageStatus === 'failed';
     const errorTip    = isFailed && c.lastSendError ? c.lastSendError.replace(/"/g, '&quot;') : '';
     const statusCell  = isFailed
@@ -812,15 +747,25 @@ async function refreshContacts() {
     const crmCell   = crmIntent
       ? `<td style="color:var(--success);font-weight:600" title="Sent to CRM at ${c.crmLeadSentAt || ''}">&#10003; ${crmIntent}</td>`
       : '<td>—</td>';
+    const currentStatus = c.optedOut ? 'opted-out'
+      : (c.messageStatus === 'not-interested' || c.messageStatus === 'do-not-contact')
+        ? c.messageStatus
+        : (c.messageStatus || 'queued');
+    const notesSnippet = c.notes ? `<span title="${escHtml(c.notes)}" style="cursor:help;color:var(--text-muted);font-size:11px">${escHtml(c.notes.slice(0, 30))}${c.notes.length > 30 ? '…' : ''}</span>` : '—';
     return `<tr>
       <td>${c.contactId}</td>
-      <td>${c.ownerName}</td>
+      <td>${escHtml(c.ownerName || '')}</td>
       <td>${c.phoneE164 || c.phoneRaw}</td>
-      <td>${c.unitNumber}</td>
+      <td>${c.unitNumber || '—'}</td>
       ${statusCell}
       <td>${c.salesAgentId || '—'}</td>
       ${crmCell}
       <td>${c.assignedNumberId || '—'}</td>
+      <td>${notesSnippet}</td>
+      <td style="white-space:nowrap">
+        <button onclick="openEditContact('${c.contactId}','${currentStatus}',${JSON.stringify(c.notes||'')})" style="font-size:11px;padding:2px 6px;margin-right:4px">Edit</button>
+        <button onclick="deleteContact('${c.contactId}','${escHtml(c.ownerName||c.contactId)}')" style="font-size:11px;padding:2px 6px;color:#b00">Remove</button>
+      </td>
     </tr>`;
   }).join('');
 
@@ -831,9 +776,48 @@ async function refreshContacts() {
       <button onclick="clearAllContacts()" style="color:#b00">Clear All</button>
     </p>
     <table>
-      <tr><th>ID</th><th>Owner</th><th>Phone</th><th>Unit</th><th>Status</th><th>Agent ID</th><th>CRM Lead</th><th>Number</th></tr>
+      <tr><th>ID</th><th>Owner</th><th>Phone</th><th>Unit</th><th>Status</th><th>Agent ID</th><th>CRM Lead</th><th>Number</th><th>Notes</th><th>Actions</th></tr>
       ${rows}
     </table>`;
+}
+
+// ── Contact edit / delete ─────────────────────────────────────────────
+async function deleteContact(contactId, name) {
+  if (!confirm(`Remove "${name}" from the contact list? This cannot be undone.`)) return;
+  const r = await fetch(`/api/contacts/${contactId}`, {
+    method: 'DELETE', headers: { 'X-Auth-Token': getToken() }
+  });
+  const d = await r.json();
+  if (d.error) { alert('Could not remove contact: ' + d.error); return; }
+  refreshContacts();
+}
+
+let _editContactId = null;
+function openEditContact(contactId, currentStatus, currentNotes) {
+  _editContactId = contactId;
+  const sel = document.getElementById('edit-contact-status');
+  if (sel) sel.value = currentStatus;
+  const ta = document.getElementById('edit-contact-notes');
+  if (ta) ta.value = currentNotes || '';
+  document.getElementById('edit-contact-modal').style.display = 'flex';
+}
+function closeEditContact() {
+  document.getElementById('edit-contact-modal').style.display = 'none';
+  _editContactId = null;
+}
+async function saveEditContact() {
+  if (!_editContactId) return;
+  const status = document.getElementById('edit-contact-status').value;
+  const notes  = document.getElementById('edit-contact-notes').value;
+  const r = await fetch(`/api/contacts/${_editContactId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'X-Auth-Token': getToken() },
+    body: JSON.stringify({ status, notes }),
+  });
+  const d = await r.json();
+  if (d.error) { alert('Could not update contact: ' + d.error); return; }
+  closeEditContact();
+  refreshContacts();
 }
 
 // ── Inbox ─────────────────────────────────────────────────────────────

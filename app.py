@@ -4,8 +4,7 @@
 import os
 import signal
 import sys
-from datetime import datetime
-from pathlib import Path
+from datetime import datetime, timezone
 import uuid
 
 from dotenv import load_dotenv
@@ -403,7 +402,6 @@ def templates_route():
 def _effective_initial_templates():
     settings = db.get_settings()
     overrides = settings.get("initialTemplateOverrides", {}) or {}
-    image_paths = settings.get("templateImagePaths", {}) or {}
     out = []
     for t in templates.INITIAL_TEMPLATES:
         merged = dict(t)
@@ -412,11 +410,6 @@ def _effective_initial_templates():
             merged["isOverridden"] = True
         else:
             merged["isOverridden"] = False
-        path = image_paths.get(t["id"])
-        has = bool(path and Path(path).exists())
-        merged["hasImage"] = has
-        merged["imageUrl"] = f"/api/templates/{t['id']}/image" if has else None
-        merged["mediaType"] = Path(path).suffix.lower().lstrip(".") if has else None
         out.append(merged)
     return out
 
@@ -439,126 +432,6 @@ def update_initial_templates_route():
     settings = db.update_settings({"initialTemplateOverrides": clean})
     return jsonify({"initial": _effective_initial_templates(), "settings": settings})
 
-
-_data_root = Path(os.environ.get("WA_DATA_DIR") or (Path(__file__).parent / "data"))
-TEMPLATE_IMG_DIR = _data_root / "template_images"
-TEMPLATE_IMG_DIR.mkdir(parents=True, exist_ok=True)
-
-# Only JPEG, PNG, and PDF — other formats (AVIF, HEIC, WebP, GIF, TIFF) cause
-# WhatsApp Web to open a non-standard editor UI that the automation cannot handle.
-ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".png"}
-ALLOWED_DOC_EXTS   = {".pdf"}
-ALLOWED_MEDIA_EXTS = ALLOWED_IMAGE_EXTS | ALLOWED_DOC_EXTS
-
-
-def _validate_media_file(file_bytes, ext):
-    """Returns (ok: bool, error: str|None, media_type: 'image'|'pdf'|None)."""
-    if ext in ALLOWED_DOC_EXTS:
-        if not file_bytes.startswith(b"%PDF"):
-            return False, "File does not appear to be a valid PDF (missing PDF header).", None
-        return True, None, "pdf"
-    # Image validation via Pillow
-    try:
-        from PIL import Image
-        import io
-        img = Image.open(io.BytesIO(file_bytes))
-        img.verify()
-        return True, None, "image"
-    except Exception as e:
-        return False, f"Image file is corrupt or unreadable: {e}", None
-
-
-@app.route("/api/templates/<template_id>/image", methods=["POST"])
-def upload_template_image(template_id):
-    user = _current_user()
-    if not user:
-        return jsonify({"error": "Unauthorized"}), 401
-    valid_ids = {t["id"] for t in templates.INITIAL_TEMPLATES}
-    if template_id not in valid_ids:
-        return jsonify({"error": "Unknown template id"}), 404
-    if "image" not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
-
-    f = request.files["image"]
-    ext = Path(f.filename or "").suffix.lower()
-    if ext not in ALLOWED_MEDIA_EXTS:
-        friendly = "JPG, PNG, GIF, WebP, BMP, HEIC, AVIF, TIFF, PDF"
-        return jsonify({"error": f"Unsupported file type '{ext}'. Accepted formats: {friendly}"}), 400
-
-    file_bytes = f.read()
-
-    # Validate the file is actually readable and not corrupt
-    ok, err, media_type = _validate_media_file(file_bytes, ext)
-    if not ok:
-        return jsonify({"error": err}), 400
-
-    # Remove any previous media for this template
-    for old in TEMPLATE_IMG_DIR.glob(f"{template_id}.*"):
-        old.unlink(missing_ok=True)
-
-    dest = TEMPLATE_IMG_DIR / f"{template_id}{ext}"
-    dest.write_bytes(file_bytes)
-
-    image_paths = dict(db.get_settings().get("templateImagePaths") or {})
-    image_paths[template_id] = str(dest)
-    db.update_settings({"templateImagePaths": image_paths})
-    return jsonify({
-        "ok": True,
-        "templateId": template_id,
-        "mediaType": media_type,
-        "url": f"/api/templates/{template_id}/image",
-    })
-
-
-@app.route("/api/templates/<template_id>/image", methods=["GET"])
-def serve_template_image(template_id):
-    image_paths = db.get_settings().get("templateImagePaths") or {}
-    path = image_paths.get(template_id)
-    if not path or not Path(path).exists():
-        return jsonify({"error": "No image"}), 404
-    p = Path(path)
-    return send_from_directory(str(p.parent), p.name)
-
-
-@app.route("/api/templates/<template_id>/image", methods=["DELETE"])
-def delete_template_image(template_id):
-    user = _current_user()
-    if not user:
-        return jsonify({"error": "Unauthorized"}), 401
-    image_paths = dict(db.get_settings().get("templateImagePaths") or {})
-    path = image_paths.pop(template_id, None)
-    if path:
-        Path(path).unlink(missing_ok=True)
-    db.update_settings({"templateImagePaths": image_paths})
-    return jsonify({"ok": True})
-
-
-
-@app.route("/api/templates/validate-images", methods=["GET"])
-def validate_template_images():
-    """Pre-flight check called before campaign launch. Returns any templates whose
-    stored media file is missing or corrupt so the UI can warn the user."""
-    user = _current_user()
-    if not user:
-        return jsonify({"error": "Unauthorized"}), 401
-    image_paths = db.get_settings().get("templateImagePaths") or {}
-    issues = []
-    for tid, path in image_paths.items():
-        if not path:
-            continue
-        p = Path(path)
-        if not p.exists():
-            issues.append({"templateId": tid, "reason": "File no longer exists on disk."})
-            continue
-        try:
-            file_bytes = p.read_bytes()
-            ext = p.suffix.lower()
-            ok, err, _ = _validate_media_file(file_bytes, ext)
-            if not ok:
-                issues.append({"templateId": tid, "reason": err})
-        except Exception as e:
-            issues.append({"templateId": tid, "reason": str(e)})
-    return jsonify({"issues": issues})
 
 
 # ---- settings (delay range, template overrides) ----
@@ -696,6 +569,46 @@ def requeue_contact_route(contact_id):
         "nextFollowUpAt": None,
     })
     return jsonify({"ok": True})
+
+
+@app.route("/api/contacts/<contact_id>", methods=["DELETE"])
+def delete_contact_route(contact_id):
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+    removed = db.delete_contacts(lambda c: c.get("contactId") == contact_id)
+    if not removed:
+        return jsonify({"error": "Contact not found"}), 404
+    return jsonify({"ok": True})
+
+
+@app.route("/api/contacts/<contact_id>", methods=["PATCH"])
+def update_contact_route(contact_id):
+    user = _current_user()
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+    body = request.get_json(silent=True) or {}
+    patch = {}
+    if "status" in body:
+        s = str(body["status"]).strip()
+        allowed = {"queued", "sent", "failed", "opted-out", "not-interested", "do-not-contact"}
+        if s not in allowed:
+            return jsonify({"error": f"Invalid status. Must be one of: {', '.join(sorted(allowed))}"}), 400
+        if s == "opted-out":
+            patch["optedOut"] = True
+            patch["optedOutAt"] = datetime.now(timezone.utc).isoformat()
+        else:
+            patch["optedOut"] = False
+            patch["messageStatus"] = s
+    if "notes" in body:
+        patch["notes"] = str(body.get("notes", "")).strip()
+    if not patch:
+        return jsonify({"error": "Nothing to update"}), 400
+    try:
+        contact = db.update_contact(contact_id, patch)
+    except ValueError:
+        return jsonify({"error": "Contact not found"}), 404
+    return jsonify({"ok": True, "contact": contact})
 
 
 @app.route("/api/contacts/clear-invalid", methods=["POST"])

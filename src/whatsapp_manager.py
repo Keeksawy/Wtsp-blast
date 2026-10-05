@@ -566,7 +566,7 @@ class NumberSession:
                 row = rows.nth(i)
                 if row.locator(SELECTORS["unread_badge"]).count() == 0:
                     continue
-                self._open_chat_and_capture(page, row)
+                self._open_chat_and_capture(page, row, realtime=True)
 
             # Pass 2: retroactive scan of contacts we've messaged (every 2 min)
             now = time.time()
@@ -577,7 +577,7 @@ class NumberSession:
         except Exception as e:
             self.manager._emit("error", {"numberId": self.number_id, "error": f"poll_inbound: {e}"})
 
-    def _open_chat_and_capture(self, page, row=None, phone_e164=None):
+    def _open_chat_and_capture(self, page, row=None, phone_e164=None, realtime=True):
         """Click a chat row (or navigate directly by phone) and capture inbound messages."""
         try:
             if phone_e164:
@@ -694,7 +694,7 @@ class NumberSession:
                 # that the scraper picks up when no caption text is accessible.
                 # The regex is precise enough on its own; no length filter (would drop "Yes").
                 if body and not _TS_RE.match(body):
-                    self._handle_inbound(chat_phone_e164, chat_name, body)
+                    self._handle_inbound(chat_phone_e164, chat_name, body, realtime=realtime)
         except Exception as e:
             print(f"[inbound scan] error: {e}", flush=True)
 
@@ -708,7 +708,7 @@ class NumberSession:
                         and c.get("phoneE164")]
             print(f"[deep scan] numberId={self.number_id} scanning {len(contacts)} of {len(all_contacts)} contacts", flush=True)
             for c in contacts[:15]:
-                self._open_chat_and_capture(page, phone_e164=c["phoneE164"])
+                self._open_chat_and_capture(page, phone_e164=c["phoneE164"], realtime=False)
                 page.wait_for_timeout(500)
             # Return to home after scan
             page.goto("https://web.whatsapp.com", timeout=15000)
@@ -716,7 +716,7 @@ class NumberSession:
         except Exception as e:
             print(f"[deep scan] error: {e}", flush=True)
 
-    def _handle_inbound(self, chat_phone_e164, chat_name, body):
+    def _handle_inbound(self, chat_phone_e164, chat_name, body, realtime=True):
         if not body or not body.strip():
             return
         body = body.strip()
@@ -758,7 +758,7 @@ class NumberSession:
             "numberId": self.number_id, "direction": "inbound", "body": body, "status": "received",
         })
         cfg = self.manager.cfg
-        if contact and safety.detect_opt_out(body, cfg):
+        if contact and realtime and safety.detect_opt_out(body, cfg):
             db.update_contact(contact["contactId"], {"optedOut": True, "optedOutAt": datetime.now(timezone.utc).isoformat()})
             outbound = db.get_messages(contact_id=contact["contactId"], direction="outbound")
             if outbound:

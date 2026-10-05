@@ -6,7 +6,6 @@ import threading
 import random
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 
 from . import db, safety, templates
 
@@ -136,16 +135,9 @@ class CampaignRunner:
         rendered = templates.render_for_contact(kind, contact, v, follow_up_index=contact.get("followUpCount") or 0, cfg=self.cfg)
         text, template_obj, greeting, opt_out_line = rendered["text"], rendered["templateObj"], rendered["greeting"], rendered["optOutLine"]
 
-        # Use image send if the template has an attached image
-        image_paths = db.get_settings().get("templateImagePaths") or {}
-        image_path = image_paths.get(template_obj["id"])
-
         status, error_msg = "sent", None
         try:
-            if image_path and Path(image_path).exists():
-                self.wa_manager.send_image(number_id, contact["phoneE164"], image_path, text)
-            else:
-                self.wa_manager.send_text(number_id, contact["phoneE164"], text)
+            self.wa_manager.send_text(number_id, contact["phoneE164"], text)
         except Exception as e:
             status, error_msg = "failed", str(e)
 

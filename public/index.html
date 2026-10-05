@@ -54,14 +54,24 @@
   </div>
 </div>
 
-<!-- ── Media-issue modal (shown before campaign launch) ─────────────── -->
-<div id="media-issue-modal" style="display:none;position:fixed;inset:0;background:rgba(15,34,64,.55);align-items:center;justify-content:center;z-index:1000">
-  <div class="modal-card" style="max-width:480px">
-    <h3 style="margin:0 0 10px">⚠️ Media file issue</h3>
-    <p id="media-issue-body" style="font-size:13px;color:var(--text-muted);margin:0 0 16px"></p>
+<!-- ── Edit-contact modal ────────────────────────────────────────────── -->
+<div id="edit-contact-modal" style="display:none;position:fixed;inset:0;background:rgba(15,34,64,.55);align-items:center;justify-content:center;z-index:1000">
+  <div class="modal-card" style="max-width:420px;width:100%">
+    <h3 style="margin:0 0 14px">Edit Contact</h3>
+    <label style="display:block;margin-bottom:6px;font-size:13px;font-weight:600">Status</label>
+    <select id="edit-contact-status" style="width:100%;margin-bottom:14px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+      <option value="queued">Queued</option>
+      <option value="sent">Sent</option>
+      <option value="failed">Failed</option>
+      <option value="opted-out">Opted-Out</option>
+      <option value="not-interested">Not Interested</option>
+      <option value="do-not-contact">Do Not Contact</option>
+    </select>
+    <label style="display:block;margin-bottom:6px;font-size:13px;font-weight:600">Notes</label>
+    <textarea id="edit-contact-notes" rows="3" placeholder="Internal notes (not sent to contact)" style="width:100%;box-sizing:border-box;margin-bottom:16px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;resize:vertical"></textarea>
     <div class="modal-btns">
-      <button onclick="startCampaignNoImages()">Send without images</button>
-      <button class="cancel" onclick="document.getElementById('media-issue-modal').style.display='none'">Cancel — fix first</button>
+      <button onclick="saveEditContact()">Save</button>
+      <button class="cancel" onclick="closeEditContact()">Cancel</button>
     </div>
   </div>
 </div>
