@@ -92,7 +92,7 @@ except Exception as e:
     _fatal("WA Outreach — startup error", f"Could not load the window engine:\n\n{e}")
 
 
-FLASK_PORT = int(os.environ.get("PORT", 3000))
+_DEFAULT_PORT = int(os.environ.get("PORT", 3000))
 
 _LOADING_HTML = """<!doctype html>
 <html>
@@ -134,13 +134,23 @@ _LOADING_HTML = """<!doctype html>
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
-def _port_in_use(port: int) -> bool:
-    with socket.socket() as s:
-        try:
-            s.bind(("127.0.0.1", port))
-            return False
-        except OSError:
-            return True
+FLASK_PORT: int = _DEFAULT_PORT   # resolved to a free port in _run()
+_flask_start_error: str = ""      # populated if _start_flask crashes
+
+
+def _find_free_port(start: int, attempts: int = 20) -> int:
+    """Return the first free port at or after start. Raises RuntimeError if none found."""
+    for p in range(start, start + attempts):
+        with socket.socket() as s:
+            try:
+                s.bind(("127.0.0.1", p))
+                return p
+            except OSError:
+                continue
+    raise RuntimeError(
+        f"Could not find a free port in range {start}–{start + attempts - 1}. "
+        "Close other applications and try again."
+    )
 
 
 def _wait_for_flask(timeout: float = 30.0) -> bool:
@@ -155,14 +165,19 @@ def _wait_for_flask(timeout: float = 30.0) -> bool:
 
 
 def _start_flask():
-    from app import app as flask_app
-    flask_app.run(
-        host="127.0.0.1",
-        port=FLASK_PORT,
-        debug=False,
-        use_reloader=False,
-        threaded=True,
-    )
+    global _flask_start_error
+    try:
+        from app import app as flask_app
+        flask_app.run(
+            host="127.0.0.1",
+            port=FLASK_PORT,
+            debug=False,
+            use_reloader=False,
+            threaded=True,
+        )
+    except Exception as exc:
+        _flask_start_error = str(exc)
+        print(f"[flask] startup error: {exc}", file=sys.stderr, flush=True)
 
 
 def _ensure_playwright_browsers():
@@ -203,9 +218,16 @@ def main():
 
 
 def _run():
+    global FLASK_PORT
+
     if not _acquire_instance_lock():
-        # Another instance already holds the lock — exit silently.
         sys.exit(0)
+
+    # Resolve a free port before starting Flask so we never get a silent bind failure.
+    try:
+        FLASK_PORT = _find_free_port(_DEFAULT_PORT)
+    except RuntimeError as exc:
+        _fatal("WA Outreach — Port unavailable", str(exc))
 
     flask_thread = threading.Thread(target=_start_flask, daemon=True)
     flask_thread.start()
@@ -225,13 +247,17 @@ def _run():
         try:
             if _wait_for_flask(timeout=30):
                 window.load_url(f"http://127.0.0.1:{FLASK_PORT}/")
-            else:
-                window.load_html(
-                    "<body style='font-family:sans-serif;padding:48px;color:#c0392b'>"
-                    "<h2>Server failed to start.</h2>"
-                    "<p>Please quit and reopen the app.</p>"
-                    "</body>"
-                )
+                return
+            detail = _flask_start_error or "Flask did not respond within 30 seconds."
+            window.load_html(
+                "<body style='font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;"
+                "padding:48px;background:#fff;color:#c0392b'>"
+                "<h2 style='margin:0 0 12px'>Server failed to start</h2>"
+                f"<p style='font-size:13px;color:#333;margin:0 0 16px'>{detail}</p>"
+                "<p style='font-size:12px;color:#888'>Please quit and reopen the app. "
+                "If this keeps happening, restart your computer and try again.</p>"
+                "</body>"
+            )
         except Exception as exc:
             print(f"[desktop] _after_start error: {exc}", file=sys.stderr)
 
