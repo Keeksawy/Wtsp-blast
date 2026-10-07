@@ -772,18 +772,7 @@ class NumberSession:
         if len(self._seen_inbound) > 500:
             self._seen_inbound.clear()
 
-        # Persistent dedup — check DB so restarts don't re-store the same message.
-        # Match on BOTH contact and body prefix so two different contacts who reply
-        # with the same short text (e.g. "Yes") are both stored.
-        contact_id_for_dedup = contact.get("contactId") if contact else None
-        existing = db.get_messages(direction="inbound")
-        for m in existing:
-            same_body = m.get("body", "").strip()[:60] == body[:60]
-            same_contact = m.get("contactId") == contact_id_for_dedup if contact_id_for_dedup else same_body
-            if same_body and same_contact:
-                # Already stored — still update in-memory cache but skip DB write
-                return
-
+        # Resolve contact first (needed for per-contact dedup below)
         contact = None
         contacts = db.get_contacts()
 
@@ -800,6 +789,18 @@ class NumberSession:
                 if c.get("ownerName") and c["ownerName"].strip().lower() == chat_name.strip().lower():
                     contact = c
                     break
+
+        # Persistent dedup — check DB so restarts don't re-store the same message.
+        # Match on BOTH contact and body prefix so two different contacts who reply
+        # with the same short text (e.g. "Yes") are both stored.
+        contact_id_for_dedup = contact.get("contactId") if contact else None
+        existing = db.get_messages(direction="inbound")
+        for m in existing:
+            same_body = m.get("body", "").strip()[:60] == body[:60]
+            same_contact = m.get("contactId") == contact_id_for_dedup if contact_id_for_dedup else same_body
+            if same_body and same_contact:
+                # Already stored — still update in-memory cache but skip DB write
+                return
 
         db.log_message({
             "contactId": contact["contactId"] if contact else None,
