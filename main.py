@@ -186,15 +186,39 @@ def _ensure_playwright_browsers():
     if browsers_path:
         os.makedirs(browsers_path, exist_ok=True)
         if glob.glob(os.path.join(browsers_path, "chromium-*")):
+            _unquarantine(browsers_path)
             return
+
+    # Use Playwright's own bundled driver to install Chromium — running
+    # sys.executable with -m playwright does not work inside a PyInstaller bundle.
+    try:
+        from playwright._impl._driver import compute_driver_executable
+        driver = str(compute_driver_executable())
+    except Exception:
+        driver = None
+
     import subprocess
     try:
-        subprocess.run(
-            [sys.executable, "-m", "playwright", "install", "chromium"],
-            check=True,
-        )
+        cmd = ([driver, "install", "chromium"] if driver
+               else [sys.executable, "-m", "playwright", "install", "chromium"])
+        subprocess.run(cmd, check=True, env={**os.environ, "PLAYWRIGHT_BROWSERS_PATH": browsers_path or ""})
+        if browsers_path:
+            _unquarantine(browsers_path)
     except Exception as exc:
         print(f"[desktop] Playwright install failed: {exc}", file=sys.stderr, flush=True)
+
+
+def _unquarantine(path: str):
+    """Remove macOS quarantine attribute from Playwright Chromium after download.
+    Without this step macOS silently blocks the browser binary from running."""
+    if sys.platform != "darwin":
+        return
+    import subprocess
+    try:
+        subprocess.run(["xattr", "-r", "-d", "com.apple.quarantine", path],
+                       capture_output=True)
+    except Exception:
+        pass
 
 
 # ── Main ───────────────────────────────────────────────────────────────────

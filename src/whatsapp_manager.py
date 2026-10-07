@@ -95,8 +95,17 @@ class NumberSession:
             with sync_playwright() as p:
                 context = p.chromium.launch_persistent_context(
                     profile_dir, headless=True,
-                    channel="chrome",
-                    args=["--no-sandbox", "--disable-setuid-sandbox"],
+                    args=[
+                        "--no-sandbox",
+                        "--disable-setuid-sandbox",
+                        "--disable-blink-features=AutomationControlled",
+                        "--disable-dev-shm-usage",
+                    ],
+                    user_agent=(
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/124.0.0.0 Safari/537.36"
+                    ),
                 )
                 page = context.pages[0] if context.pages else context.new_page()
                 page.goto("https://web.whatsapp.com", timeout=60000)
