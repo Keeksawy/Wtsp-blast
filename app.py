@@ -120,7 +120,10 @@ def auth_register():
         return jsonify({"error": "Password must be at least 8 characters"}), 400
     if db.find_user_by_email(email):
         return jsonify({"error": "An account with that email already exists"}), 409
-    user = db.add_user(email, auth_lib.hash_password(password), role="user")
+    # First user on this machine automatically becomes admin
+    existing_users = db.get_users()
+    role = "admin" if not existing_users else "user"
+    user = db.add_user(email, auth_lib.hash_password(password), role=role)
     # Auto sign-in after registration
     token = auth_lib.generate_token()
     db.create_session(user["userId"], token, auth_lib.token_expiry())
@@ -628,8 +631,8 @@ def reset_route():
     """Stop all number connections and wipe contacts, messages, and numbers.
     Settings and users are preserved."""
     user = _current_user()
-    if not user or user.get("role") != "admin":
-        return jsonify({"error": "Admin only"}), 403
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
     for n in db.get_numbers():
         nid = n.get("id")
         if nid:
