@@ -294,10 +294,14 @@
 
         <!-- Contacts table -->
         <div class="card table-card">
-          <div class="card-header" style="padding:14px 18px">
-            <h2 class="card-title">All Contacts</h2>
+          <div class="card-header" style="padding:14px 18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <h2 class="card-title" style="margin:0;flex:1">All Contacts</h2>
+            <input id="contacts-search" type="search" placeholder="Search name, phone, unit…"
+              oninput="renderContactsPage()"
+              style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:220px" />
           </div>
           <div id="contacts-table"></div>
+          <div id="contacts-pagination" style="display:flex;align-items:center;gap:8px;padding:12px 18px;border-top:1px solid var(--border);flex-wrap:wrap"></div>
         </div>
 
       </div>

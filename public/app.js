@@ -520,22 +520,26 @@ async function confirmImport() {
   const preview = _importPreview;
   if (!preview) return;
 
-  // Collect any inline corrections the user typed
-  const corrections = preview.invalid
-    .map((item, i) => {
-      const fixed = (document.getElementById(`fix-${i}`)?.value || '').trim();
-      if (!fixed || fixed === item.original) return null;
-      return { ownerName: item.ownerName, mobile: fixed, unitNumber: item.unitNumber, salesAgentId: item.salesAgentId };
-    })
-    .filter(Boolean);
+  // Corrections are now handled inline when building correctedInvalid below.
 
   document.getElementById('import-preview-modal').style.display = 'none';
   document.getElementById('import-result').innerHTML = '<p class="hint">Importing…</p>';
 
+  // Build the complete row list: valid rows + invalid rows (with any user corrections applied).
+  // Invalid rows are sent as-is; the backend marks them invalidNumber:true so they appear in
+  // the list where the user can see and remove them — previously they were silently dropped.
+  const correctedInvalid = preview.invalid.map((item, i) => ({
+    ownerName: item.ownerName,
+    mobile: (document.getElementById(`fix-${i}`)?.value || '').trim() || item.original,
+    unitNumber: item.unitNumber,
+    salesAgentId: item.salesAgentId,
+  }));
+  const allRows = [...preview.ready, ...correctedInvalid];
+
   const r = await fetch('/api/contacts/import-rows', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Auth-Token': getToken() },
-    body: JSON.stringify({ rows: preview.ready, corrections, campaignName }),
+    body: JSON.stringify({ rows: allRows, campaignName }),
   });
   const result = await r.json();
   _importPreview = null;
@@ -722,63 +726,115 @@ async function clearAllContacts() {
   refreshDashboard();
 }
 
-async function refreshContacts() {
-  const contacts     = await jget('/api/contacts');
-  if (!Array.isArray(contacts)) return;
-  const invalidCount = contacts.filter(c => c.invalidNumber || !c.phoneE164).length;
+let _allContacts   = [];   // full list from server
+let _contactsPage  = 1;
+const _PAGE_SIZE   = 50;
 
-  // Update count badge
+async function refreshContacts() {
+  const contacts = await jget('/api/contacts');
+  if (!Array.isArray(contacts)) return;
+  _allContacts  = contacts;
+  _contactsPage = 1;
   const countEl = document.getElementById('contacts-count');
   if (countEl) countEl.textContent = contacts.length;
+  renderContactsPage();
+}
 
-  const rows = contacts.slice(0, 200).map(c => {
-    const pillClass = c.optedOut          ? 'pill-optout'
-                    : c.messageStatus === 'sent'   ? 'pill-sent'
-                    : c.messageStatus === 'failed' ? 'pill-failed'
-                    : 'pill-pending';
-    const _statusMap = { 'not-interested': 'Not Interested', 'do-not-contact': 'Do Not Contact' };
-    const statusLabel = c.invalidNumber ? 'Invalid' : c.optedOut ? 'Opted out' : (_statusMap[c.messageStatus] || c.messageStatus || '—');
-    const isFailed    = c.messageStatus === 'failed';
-    const errorTip    = isFailed && c.lastSendError ? c.lastSendError.replace(/"/g, '&quot;') : '';
-    const statusCell  = isFailed
-      ? `<td><span class="status-pill pill-failed" title="${errorTip || 'Hover for details'}" style="cursor:help">&#9888; failed</span> <button onclick="retryContact('${c.contactId}')" style="font-size:11px;padding:2px 6px;margin-left:4px">Retry</button></td>`
-      : `<td><span class="status-pill ${pillClass}">${statusLabel}</span></td>`;
-    const crmIntent = c.crmLeadIntent;
-    const crmCell   = crmIntent
-      ? `<td style="color:var(--success);font-weight:600" title="Sent to CRM at ${c.crmLeadSentAt || ''}">&#10003; ${crmIntent}</td>`
-      : '<td>—</td>';
-    const currentStatus = c.optedOut ? 'opted-out'
-      : (c.messageStatus === 'not-interested' || c.messageStatus === 'do-not-contact')
-        ? c.messageStatus
-        : (c.messageStatus || 'queued');
-    const notesSnippet = c.notes ? `<span title="${escHtml(c.notes)}" style="cursor:help;color:var(--text-muted);font-size:11px">${escHtml(c.notes.slice(0, 30))}${c.notes.length > 30 ? '…' : ''}</span>` : '—';
-    return `<tr>
-      <td>${c.contactId}</td>
-      <td>${escHtml(c.ownerName || '')}</td>
-      <td>${c.phoneE164 || c.phoneRaw}</td>
-      <td>${c.unitNumber || '—'}</td>
-      ${statusCell}
-      <td>${c.salesAgentId || '—'}</td>
-      ${crmCell}
-      <td>${c.assignedNumberId || '—'}</td>
-      <td>${notesSnippet}</td>
-      <td style="white-space:nowrap">
-        <button onclick="openEditContact('${c.contactId}','${currentStatus}',decodeURIComponent('${encodeURIComponent(c.notes||'')}'))" style="font-size:11px;padding:2px 6px;margin-right:4px">Edit</button>
-        <button onclick="deleteContact('${c.contactId}','${escHtml(c.ownerName||c.contactId)}')" style="font-size:11px;padding:2px 6px;color:#b00">Remove</button>
-      </td>
-    </tr>`;
-  }).join('');
+function _contactRow(c) {
+  const pillClass = c.optedOut              ? 'pill-optout'
+                  : c.messageStatus === 'sent'   ? 'pill-sent'
+                  : c.messageStatus === 'failed' ? 'pill-failed'
+                  : 'pill-pending';
+  const _statusMap = { 'not-interested': 'Not Interested', 'do-not-contact': 'Do Not Contact' };
+  const statusLabel = c.invalidNumber ? 'Invalid' : c.optedOut ? 'Opted out' : (_statusMap[c.messageStatus] || c.messageStatus || '—');
+  const isFailed   = c.messageStatus === 'failed';
+  const errorTip   = isFailed && c.lastSendError ? c.lastSendError.replace(/"/g, '&quot;') : '';
+  const statusCell = isFailed
+    ? `<td><span class="status-pill pill-failed" title="${errorTip || 'Hover for details'}" style="cursor:help">&#9888; failed</span> <button onclick="retryContact('${c.contactId}')" style="font-size:11px;padding:2px 6px;margin-left:4px">Retry</button></td>`
+    : `<td><span class="status-pill ${pillClass}">${statusLabel}</span></td>`;
+  const crmIntent  = c.crmLeadIntent;
+  const crmCell    = crmIntent
+    ? `<td style="color:var(--success);font-weight:600" title="Sent to CRM at ${c.crmLeadSentAt || ''}">&#10003; ${crmIntent}</td>`
+    : '<td>—</td>';
+  const currentStatus = c.optedOut ? 'opted-out'
+    : (c.messageStatus === 'not-interested' || c.messageStatus === 'do-not-contact')
+      ? c.messageStatus
+      : (c.messageStatus || 'queued');
+  const notesSnippet = c.notes
+    ? `<span title="${escHtml(c.notes)}" style="cursor:help;color:var(--text-muted);font-size:11px">${escHtml(c.notes.slice(0, 30))}${c.notes.length > 30 ? '…' : ''}</span>`
+    : '—';
+  return `<tr>
+    <td>${c.contactId}</td>
+    <td>${escHtml(c.ownerName || '')}</td>
+    <td>${c.phoneE164 || c.phoneRaw || '—'}</td>
+    <td>${c.unitNumber || '—'}</td>
+    ${statusCell}
+    <td>${c.salesAgentId || '—'}</td>
+    ${crmCell}
+    <td>${c.assignedNumberId || '—'}</td>
+    <td>${notesSnippet}</td>
+    <td style="white-space:nowrap">
+      <button onclick="openEditContact('${c.contactId}','${currentStatus}',decodeURIComponent('${encodeURIComponent(c.notes||'')}'))" style="font-size:11px;padding:2px 6px;margin-right:4px">Edit</button>
+      <button onclick="deleteContact('${c.contactId}','${escHtml(c.ownerName||c.contactId)}')" style="font-size:11px;padding:2px 6px;color:#b00">Remove</button>
+    </td>
+  </tr>`;
+}
+
+function renderContactsPage() {
+  const q = (document.getElementById('contacts-search')?.value || '').trim().toLowerCase();
+  const filtered = q
+    ? _allContacts.filter(c =>
+        (c.ownerName  || '').toLowerCase().includes(q) ||
+        (c.phoneE164  || '').includes(q) ||
+        (c.phoneRaw   || '').includes(q) ||
+        (c.unitNumber || '').toLowerCase().includes(q) ||
+        (c.contactId  || '').toLowerCase().includes(q))
+    : _allContacts;
+
+  const totalPages  = Math.max(1, Math.ceil(filtered.length / _PAGE_SIZE));
+  _contactsPage     = Math.min(_contactsPage, totalPages);
+  const start       = (_contactsPage - 1) * _PAGE_SIZE;
+  const pageSlice   = filtered.slice(start, start + _PAGE_SIZE);
+  const invalidCount = _allContacts.filter(c => c.invalidNumber || !c.phoneE164).length;
+
+  const rows = pageSlice.map(_contactRow).join('');
 
   document.getElementById('contacts-table').innerHTML = `
-    <p class="hint">Showing up to 200 of ${contacts.length} contacts.
-      ${invalidCount > 0 ? `<strong>${invalidCount} invalid</strong> — ` : ''}
-      <button onclick="clearInvalidContacts()" style="margin-right:8px">Remove Invalid</button>
-      <button onclick="clearAllContacts()" style="color:#b00">Clear All</button>
-    </p>
+    <div style="padding:10px 18px 4px;font-size:13px;color:var(--text-muted);display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <span>Showing ${filtered.length ? start + 1 : 0}–${Math.min(start + _PAGE_SIZE, filtered.length)} of <strong>${filtered.length}</strong>${q ? ' matching' : ''} contacts (${_allContacts.length} total)</span>
+      <span style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        ${invalidCount > 0 ? `<strong style="color:#b00">${invalidCount} invalid</strong>` : ''}
+        <button onclick="clearInvalidContacts()" style="font-size:12px">Remove Invalid</button>
+        <button onclick="clearAllContacts()" style="font-size:12px;color:#b00">Clear All</button>
+      </span>
+    </div>
     <table>
       <tr><th>ID</th><th>Owner</th><th>Phone</th><th>Unit</th><th>Status</th><th>Agent ID</th><th>CRM Lead</th><th>Number</th><th>Notes</th><th>Actions</th></tr>
-      ${rows}
+      ${rows || '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);padding:24px">No contacts found</td></tr>'}
     </table>`;
+
+  // Pagination bar
+  const pag = document.getElementById('contacts-pagination');
+  if (!pag) return;
+  if (totalPages <= 1) { pag.innerHTML = ''; return; }
+
+  let pagHtml = `<span style="font-size:13px;color:var(--text-muted)">Page ${_contactsPage} of ${totalPages}</span>`;
+  pagHtml += `<button ${_contactsPage === 1 ? 'disabled' : ''} onclick="_goContactsPage(1)" style="font-size:12px">&#171; First</button>`;
+  pagHtml += `<button ${_contactsPage === 1 ? 'disabled' : ''} onclick="_goContactsPage(${_contactsPage - 1})" style="font-size:12px">&#8249; Prev</button>`;
+  // Show up to 5 page number buttons around current page
+  const lo = Math.max(1, _contactsPage - 2), hi = Math.min(totalPages, _contactsPage + 2);
+  for (let p = lo; p <= hi; p++) {
+    pagHtml += `<button onclick="_goContactsPage(${p})" style="font-size:12px;font-weight:${p === _contactsPage ? '700' : '400'};${p === _contactsPage ? 'background:var(--navy);color:#fff;' : ''}">${p}</button>`;
+  }
+  pagHtml += `<button ${_contactsPage === totalPages ? 'disabled' : ''} onclick="_goContactsPage(${_contactsPage + 1})" style="font-size:12px">Next &#8250;</button>`;
+  pagHtml += `<button ${_contactsPage === totalPages ? 'disabled' : ''} onclick="_goContactsPage(${totalPages})" style="font-size:12px">Last &#187;</button>`;
+  pag.innerHTML = pagHtml;
+}
+
+function _goContactsPage(n) {
+  _contactsPage = n;
+  renderContactsPage();
+  document.getElementById('contacts-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ── Contact edit / delete ─────────────────────────────────────────────
