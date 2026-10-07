@@ -91,22 +91,54 @@ class NumberSession:
     def _run(self):
         profile_dir = str(DATA_DIR / self.session_id)
         Path(profile_dir).mkdir(parents=True, exist_ok=True)
+
+        # Watchdog: if the browser never starts (driver hangs silently in a
+        # frozen app), the except block never runs and status stays "initializing"
+        # forever. This timer converts that into a visible error after 90 s.
+        _browser_started = threading.Event()
+
+        def _watchdog():
+            if _browser_started.wait(timeout=90):
+                return
+            current = db.find_number_by_id(self.number_id)
+            if current and current.get("status") == "initializing":
+                msg = (
+                    "Browser failed to start after 90 s. On macOS go to "
+                    "System Settings → Privacy & Security and allow the app, "
+                    "then click Reconnect."
+                )
+                db.update_number(self.number_id, {"status": "error", "paused": True, "pauseReason": msg})
+                self.manager._emit("status", {"numberId": self.number_id, "status": "error", "error": msg})
+
+        threading.Thread(target=_watchdog, daemon=True).start()
+
+        _launch_args = [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-blink-features=AutomationControlled",
+            "--disable-dev-shm-usage",
+        ]
+        _user_agent = (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        )
+
         try:
             with sync_playwright() as p:
-                context = p.chromium.launch_persistent_context(
-                    profile_dir, headless=True,
-                    args=[
-                        "--no-sandbox",
-                        "--disable-setuid-sandbox",
-                        "--disable-blink-features=AutomationControlled",
-                        "--disable-dev-shm-usage",
-                    ],
-                    user_agent=(
-                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                        "AppleWebKit/537.36 (KHTML, like Gecko) "
-                        "Chrome/124.0.0.0 Safari/537.36"
-                    ),
-                )
+                _browser_started.set()  # driver subprocess started — watchdog disarmed
+                try:
+                    context = p.chromium.launch_persistent_context(
+                        profile_dir, headless=True,
+                        args=_launch_args, user_agent=_user_agent,
+                    )
+                except Exception:
+                    # Playwright Chromium not available; fall back to system Chrome
+                    context = p.chromium.launch_persistent_context(
+                        profile_dir, headless=True,
+                        channel="chrome",
+                        args=_launch_args, user_agent=_user_agent,
+                    )
                 page = context.pages[0] if context.pages else context.new_page()
                 page.goto("https://web.whatsapp.com", timeout=60000)
                 self._loop(page)

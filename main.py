@@ -209,8 +209,7 @@ def _ensure_playwright_browsers():
 
 
 def _unquarantine(path: str):
-    """Remove macOS quarantine attribute from Playwright Chromium after download.
-    Without this step macOS silently blocks the browser binary from running."""
+    """Remove macOS quarantine attribute from a path recursively."""
     if sys.platform != "darwin":
         return
     import subprocess
@@ -219,6 +218,28 @@ def _unquarantine(path: str):
                        capture_output=True)
     except Exception:
         pass
+
+
+def _fix_playwright_driver():
+    """In a PyInstaller frozen app the +x bit can be stripped from bundled
+    shell scripts and binaries. The Playwright driver (playwright.sh / node)
+    must be executable or sync_playwright() will hang silently on macOS."""
+    if sys.platform == "win32":
+        return  # Windows uses .cmd, no +x needed
+    try:
+        import stat
+        import playwright as _pw
+        from pathlib import Path as _Path
+        driver_dir = _Path(_pw.__file__).parent / "driver"
+        if not driver_dir.exists():
+            return
+        for f in driver_dir.rglob("*"):
+            if f.is_file():
+                m = f.stat().st_mode
+                f.chmod(m | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        _unquarantine(str(driver_dir))
+    except Exception as exc:
+        print(f"[desktop] playwright driver fix failed: {exc}", file=sys.stderr, flush=True)
 
 
 # ── Main ───────────────────────────────────────────────────────────────────
@@ -252,6 +273,11 @@ def _run():
         FLASK_PORT = _find_free_port(_DEFAULT_PORT)
     except RuntimeError as exc:
         _fatal("WA Outreach — Port unavailable", str(exc))
+
+    # Fix Playwright driver permissions before starting any threads.
+    # In a frozen PyInstaller app the +x bit is stripped from bundled
+    # binaries, which causes sync_playwright() to hang silently on macOS.
+    _fix_playwright_driver()
 
     flask_thread = threading.Thread(target=_start_flask, daemon=True)
     flask_thread.start()
