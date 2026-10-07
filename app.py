@@ -74,16 +74,15 @@ if not db.get_settings().get("companyName"):
 if not db.get_settings().get("defaultAgentName"):
     db.update_settings({"defaultAgentName": DEFAULT_AGENT_NAME})
 
-# Seed initial users if none exist yet
-_INITIAL_USERS = [
-    {"email": "kareem.mazhar@drivenproperties.com",  "password": "Driven@2024", "role": "admin"},
-    {"email": "ibrahim.a@drivenproperties.com",       "password": "Driven@2024", "role": "user"},
-]
-if not db.get_users():
-    for _u in _INITIAL_USERS:
-        if auth_lib.is_allowed_email(_u["email"]):
-            db.add_user(_u["email"], auth_lib.hash_password(_u["password"]), role=_u["role"])
-            print(f"[auth] Seeded user: {_u['email']}")
+# Seed an initial admin from environment variables — set ADMIN_EMAIL and
+# ADMIN_PASSWORD before first launch. If neither is set and no users exist,
+# the first person who registers via the UI becomes admin automatically.
+_seed_email = os.environ.get("ADMIN_EMAIL", "").strip().lower()
+_seed_pw    = os.environ.get("ADMIN_PASSWORD", "").strip()
+if _seed_email and _seed_pw and not db.get_users():
+    if auth_lib.is_allowed_email(_seed_email):
+        db.add_user(_seed_email, auth_lib.hash_password(_seed_pw), role="admin")
+        print(f"[auth] Seeded admin user: {_seed_email}")
 
 
 @app.route("/")
@@ -564,7 +563,9 @@ def requeue_contact_route(contact_id):
     if not connected:
         return jsonify({"ok": False, "error": "No WhatsApp number is connected. Please connect a number first before retrying."}), 400
     db.update_contact(contact_id, {
-        "messageStatus": None,
+        "messageStatus": "",          # empty string matches queue_eligible_contacts(); None does not
+        "optedOut": False,
+        "notInterested": False,
         "invalidNumber": False,
         "firstContactedAt": None,
         "lastContactedAt": None,
@@ -600,8 +601,18 @@ def update_contact_route(contact_id):
         if s == "opted-out":
             patch["optedOut"] = True
             patch["optedOutAt"] = datetime.now(timezone.utc).isoformat()
+            patch["notInterested"] = False
+        elif s == "not-interested":
+            patch["optedOut"] = False
+            patch["notInterested"] = True
+            patch["messageStatus"] = s
+        elif s == "do-not-contact":
+            patch["optedOut"] = False
+            patch["notInterested"] = True   # also blocks follow-ups
+            patch["messageStatus"] = s
         else:
             patch["optedOut"] = False
+            patch["notInterested"] = False
             patch["messageStatus"] = s
     if "notes" in body:
         patch["notes"] = str(body.get("notes", "")).strip()

@@ -28,7 +28,9 @@ from playwright.sync_api import sync_playwright
 
 from . import db, safety
 
-DATA_DIR = Path(__file__).parent.parent / "data" / "sessions"
+import os as _os
+_data_base = _os.environ.get("WA_DATA_DIR") or str(Path(__file__).parent.parent / "data")
+DATA_DIR = Path(_data_base) / "sessions"
 
 # Centralized so a WhatsApp Web UI change only needs updating in one place.
 SELECTORS = {
@@ -770,10 +772,15 @@ class NumberSession:
         if len(self._seen_inbound) > 500:
             self._seen_inbound.clear()
 
-        # Persistent dedup — check DB so restarts don't re-store the same message
+        # Persistent dedup — check DB so restarts don't re-store the same message.
+        # Match on BOTH contact and body prefix so two different contacts who reply
+        # with the same short text (e.g. "Yes") are both stored.
+        contact_id_for_dedup = contact.get("contactId") if contact else None
         existing = db.get_messages(direction="inbound")
         for m in existing:
-            if m.get("body", "").strip()[:60] == body[:60]:
+            same_body = m.get("body", "").strip()[:60] == body[:60]
+            same_contact = m.get("contactId") == contact_id_for_dedup if contact_id_for_dedup else same_body
+            if same_body and same_contact:
                 # Already stored — still update in-memory cache but skip DB write
                 return
 

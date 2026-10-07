@@ -763,7 +763,7 @@ async function refreshContacts() {
       <td>${c.assignedNumberId || '—'}</td>
       <td>${notesSnippet}</td>
       <td style="white-space:nowrap">
-        <button onclick="openEditContact('${c.contactId}','${currentStatus}',${JSON.stringify(c.notes||'')})" style="font-size:11px;padding:2px 6px;margin-right:4px">Edit</button>
+        <button onclick="openEditContact('${c.contactId}','${currentStatus}',decodeURIComponent('${encodeURIComponent(c.notes||'')}'))" style="font-size:11px;padding:2px 6px;margin-right:4px">Edit</button>
         <button onclick="deleteContact('${c.contactId}','${escHtml(c.ownerName||c.contactId)}')" style="font-size:11px;padding:2px 6px;color:#b00">Remove</button>
       </td>
     </tr>`;
@@ -952,7 +952,7 @@ async function sendReply(contactId, numberId, inputId) {
   const input  = document.getElementById(inputId);
   const text   = (input?.value || '').trim();
   if (!text) return;
-  const sendBtn = input?.closest('.inbox-compose')?.querySelector('button.primary');
+  const sendBtn = input?.closest('.thread-reply-bar')?.querySelector('button.primary');
   _inboxSending = true;
   if (input)   { input.disabled = true; }
   if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sending…'; }
