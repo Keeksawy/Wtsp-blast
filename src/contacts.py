@@ -34,24 +34,18 @@ def _is_header_row(row):
     return any(_normalize_header(cell) in all_aliases for cell in row if cell is not None)
 
 
-def parse_excel_buffer(file_bytes):
-    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
-    sheet = wb[wb.sheetnames[0]]
-    all_rows = list(sheet.iter_rows(values_only=True))
+_PHONE_RE = re.compile(r"^[\+\d\s\-\(\)]{6,20}$")
+_XLSX_MAGIC = b"PK\x03\x04"  # ZIP magic bytes — every .xlsx starts with this
 
-    # Find the header row by scanning up to the first 10 rows.
-    # This skips title banners and description rows that sit above the actual headers.
+
+def _parse_rows(all_rows):
+    """Shared logic: find header, strip hint rows, map to dicts."""
     header_idx = next(
         (i for i, row in enumerate(all_rows[:10]) if _is_header_row(row)),
         0,
     )
     headers = all_rows[header_idx]
-    # Skip the description/hint row that immediately follows the header in the template
-    # (it contains long instructional text rather than real data).
     data_rows = all_rows[header_idx + 1:]
-    # Drop description/hint rows: any row whose mobile cell isn't digit-only
-    # (after stripping +, spaces, dashes) is not real data.
-    _PHONE_RE = re.compile(r"^[\+\d\s\-\(\)]{6,20}$")
 
     def _looks_like_hint(row):
         mapped = _map_row(headers, row)
@@ -60,6 +54,26 @@ def parse_excel_buffer(file_bytes):
 
     data_rows = [r for r in data_rows if not _looks_like_hint(r)]
     return [_map_row(headers, row) for row in data_rows]
+
+
+def parse_excel_buffer(file_bytes, filename=""):
+    """Parse an uploaded .xlsx or .csv file and return a list of row dicts."""
+    # Detect format: ZIP magic = XLSX; everything else treated as CSV/TSV.
+    is_xlsx = file_bytes[:4] == _XLSX_MAGIC or str(filename).lower().endswith((".xlsx", ".xls"))
+
+    if is_xlsx:
+        wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+        sheet = wb[wb.sheetnames[0]]
+        all_rows = list(sheet.iter_rows(values_only=True))
+    else:
+        # CSV / TSV — decode with BOM tolerance, auto-detect delimiter
+        import csv
+        text = file_bytes.decode("utf-8-sig", errors="replace")
+        dialect = csv.Sniffer().sniff(text[:4096], delimiters=",;\t|") if text.strip() else None
+        reader = csv.reader(io.StringIO(text), dialect=dialect or csv.excel)
+        all_rows = [tuple(cell.strip() for cell in row) for row in reader if any(c.strip() for c in row)]
+
+    return _parse_rows(all_rows)
 
 
 _UAE_LOCAL_RE = re.compile(r"^0?5\d{8}$")

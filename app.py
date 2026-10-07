@@ -301,7 +301,7 @@ def preview_contacts_route():
         return jsonify({"error": "No file uploaded"}), 400
     file = request.files["file"]
     try:
-        rows = contacts_lib.parse_excel_buffer(file.read())
+        rows = contacts_lib.parse_excel_buffer(file.read(), filename=file.filename or "")
         return jsonify(contacts_lib.preview_import(rows))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -330,7 +330,7 @@ def import_contacts_route():
     file = request.files["file"]
     campaign_name = request.form.get("campaignName") or f"Campaign-{datetime.utcnow().strftime('%Y-%m-%d')}"
     try:
-        rows = contacts_lib.parse_excel_buffer(file.read())
+        rows = contacts_lib.parse_excel_buffer(file.read(), filename=file.filename or "")
         summary = contacts_lib.import_contacts(rows, campaign_name)
         db.update_settings({"lastCampaignName": campaign_name})
         return jsonify({"campaignName": campaign_name, **summary})
