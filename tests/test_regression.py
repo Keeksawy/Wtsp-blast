@@ -597,6 +597,22 @@ class TestWindowsStartupConfig:
         assert "developer.microsoft.com" in content or "microsoft.com" in content, \
             "WebView2 error message should include the download URL"
 
+    def test_pythonnet_fallback_error_caught(self):
+        """When WebView2 is missing, pywebview throws 'pythonnet' error as fallback.
+        main.py must catch that message and show the WebView2 install dialog, not
+        the generic 'The app failed to start' message (v1.0.42 fix).
+        """
+        content = self._read()
+        # The error handler in main() checks msg content to decide which dialog to show.
+        # It must include a "pythonnet" check — pywebview's exact fallback message is
+        # "You must have pythonnet installed in order to use pywebview."
+        main_fn = content[content.find("def main():"):]
+        assert "pythonnet" in main_fn.lower(), \
+            ('main.py WebView2 error guard does not check for "pythonnet". '
+             "When WebView2 is missing, pywebview throws "
+             "'You must have pythonnet installed' — this must be caught and "
+             "redirected to the WebView2 install instructions.")
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 13. Windows data directory — stored beside the .exe, not in ~/Library

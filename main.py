@@ -250,7 +250,8 @@ def main():
     except Exception as e:
         # Catch-all — show ONE dialog and stop. Never loops.
         msg = str(e)
-        if "edgechromium" in msg or "WebView2" in msg.lower() or "webview2" in msg:
+        if ("edgechromium" in msg or "WebView2" in msg.lower() or "webview2" in msg
+                or "pythonnet" in msg.lower()):
             _fatal(
                 "WA Outreach — Missing component",
                 "Microsoft WebView2 is required but not installed.\n\n"
