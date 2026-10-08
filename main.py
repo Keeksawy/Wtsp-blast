@@ -1,8 +1,9 @@
 """
 WA Outreach — desktop entry point.
 
-Starts Flask in a background thread, then opens a native pywebview window
-at http://127.0.0.1:3000. Closing the window shuts everything down cleanly.
+macOS:   native pywebview window (WebKit, zero dependencies).
+Windows: Flask starts, default browser opens automatically. No WebView2,
+         no .NET, no extra installs needed.
 
 Run in development:   python3 main.py
 Run as built app:     double-click WA Outreach.app / WA Outreach.exe
@@ -56,9 +57,24 @@ def _acquire_instance_lock() -> bool:
         return False
 
 
-# Force WebView2 (Edge) backend on Windows — avoids pythonnet/.NET entirely.
-if sys.platform == "win32":
-    os.environ.setdefault("PYWEBVIEW_GUI", "edgechromium")
+# ── Import webview only on macOS — Windows uses the default browser ────────
+if sys.platform != "win32":
+    def _fatal_early(title: str, message: str):
+        try:
+            import subprocess
+            subprocess.run([
+                "osascript", "-e",
+                f'display dialog "{message}" with title "{title}" buttons {{"OK"}} '
+                f'default button "OK" with icon stop'
+            ])
+        except Exception:
+            print(f"{title}: {message}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        import webview
+    except Exception as _e:
+        _fatal_early("WA Outreach — startup error", f"Could not load the window engine:\n\n{_e}")
 
 
 # ── Fatal error dialog — shows ONCE then exits ────────────────────────────
@@ -83,13 +99,6 @@ def _fatal(title: str, message: str):
     else:
         print(f"{title}: {message}", file=sys.stderr)
     sys.exit(1)
-
-
-# ── Import webview after error handler is defined ─────────────────────────
-try:
-    import webview
-except Exception as e:
-    _fatal("WA Outreach — startup error", f"Could not load the window engine:\n\n{e}")
 
 
 _DEFAULT_PORT = int(os.environ.get("PORT", 3000))
@@ -242,50 +251,43 @@ def _fix_playwright_driver():
         print(f"[desktop] playwright driver fix failed: {exc}", file=sys.stderr, flush=True)
 
 
-# ── Main ───────────────────────────────────────────────────────────────────
+# ── Platform-specific run modes ────────────────────────────────────────────
 
-def main():
-    try:
-        _run()
-    except Exception as e:
-        # Catch-all — show ONE dialog and stop. Never loops.
-        msg = str(e)
-        if ("edgechromium" in msg or "WebView2" in msg.lower() or "webview2" in msg
-                or "pythonnet" in msg.lower()):
-            _fatal(
-                "WA Outreach — Missing component",
-                "Microsoft WebView2 is required but not installed.\n\n"
-                "Please install it from:\n"
-                "https://developer.microsoft.com/microsoft-edge/webview2/\n\n"
-                "(Download the 'Evergreen Bootstrapper', ~2 MB, run it, then reopen the app.)"
-            )
-        else:
-            _fatal("WA Outreach — Error", f"The app failed to start:\n\n{msg}")
+def _run_windows_browser_mode():
+    """Windows: wait for Flask, open the default browser, show a quit dialog.
+
+    No WebView2, no .NET, no pywebview — works on any Windows machine that
+    has Chrome or Edge (i.e. every company laptop).
+    """
+    import webbrowser
+    import ctypes
+
+    url = f"http://127.0.0.1:{FLASK_PORT}/"
+
+    if not _wait_for_flask(timeout=30):
+        _fatal(
+            "WA Outreach — Error",
+            _flask_start_error or "Server failed to start within 30 seconds.\n\n"
+            "Please close the app and reopen it. If the problem continues, restart your computer.",
+        )
+        return
+
+    webbrowser.open(url)
+
+    # Keep the server process alive and give the user a visible quit button.
+    ctypes.windll.user32.MessageBoxW(
+        0,
+        (f"WA Outreach is running in your browser.\n\n"
+         f"If the browser did not open, go to:\n{url}\n\n"
+         "Click OK to stop the server and quit."),
+        "WA Outreach — Running",
+        0x40,  # MB_ICONINFORMATION
+    )
+    sys.exit(0)
 
 
-def _run():
-    global FLASK_PORT
-
-    if not _acquire_instance_lock():
-        sys.exit(0)
-
-    # Resolve a free port before starting Flask so we never get a silent bind failure.
-    try:
-        FLASK_PORT = _find_free_port(_DEFAULT_PORT)
-    except RuntimeError as exc:
-        _fatal("WA Outreach — Port unavailable", str(exc))
-
-    # Fix Playwright driver permissions before starting any threads.
-    # In a frozen PyInstaller app the +x bit is stripped from bundled
-    # binaries, which causes sync_playwright() to hang silently on macOS.
-    _fix_playwright_driver()
-
-    flask_thread = threading.Thread(target=_start_flask, daemon=True)
-    flask_thread.start()
-
-    browser_thread = threading.Thread(target=_ensure_playwright_browsers, daemon=True)
-    browser_thread.start()
-
+def _run_macos_webview_mode():
+    """macOS: native pywebview window using the system WebKit — no extra installs."""
     window = webview.create_window(
         "WA Outreach — Driven Properties",
         html=_LOADING_HTML,
@@ -313,6 +315,44 @@ def _run():
             print(f"[desktop] _after_start error: {exc}", file=sys.stderr)
 
     webview.start(_after_start, debug=False)
+
+
+# ── Main ───────────────────────────────────────────────────────────────────
+
+def main():
+    try:
+        _run()
+    except Exception as e:
+        _fatal("WA Outreach — Error", f"The app failed to start:\n\n{e}")
+
+
+def _run():
+    global FLASK_PORT
+
+    if not _acquire_instance_lock():
+        if sys.platform == "win32":
+            # Second instance: focus the already-running server in the browser
+            import webbrowser
+            webbrowser.open(f"http://127.0.0.1:{_DEFAULT_PORT}/")
+        sys.exit(0)
+
+    try:
+        FLASK_PORT = _find_free_port(_DEFAULT_PORT)
+    except RuntimeError as exc:
+        _fatal("WA Outreach — Port unavailable", str(exc))
+
+    _fix_playwright_driver()
+
+    flask_thread = threading.Thread(target=_start_flask, daemon=True)
+    flask_thread.start()
+
+    browser_thread = threading.Thread(target=_ensure_playwright_browsers, daemon=True)
+    browser_thread.start()
+
+    if sys.platform == "win32":
+        _run_windows_browser_mode()
+    else:
+        _run_macos_webview_mode()
 
 
 if __name__ == "__main__":

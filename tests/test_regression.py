@@ -7,7 +7,9 @@ Covers every bug fixed between v1.0.33 and v1.0.41:
   v1.0.38 — contact import includes invalid-phone rows (not silently dropped)
   v1.0.39 — CSV files accepted (not just .xlsx)
   v1.0.40 — _handle_inbound no NameError (contact resolved before dedup check)
-  v1.0.41 — Windows: pythonnet excluded from bundle; PYWEBVIEW_GUI forced to edgechromium
+  v1.0.41 — Windows: pythonnet excluded from bundle
+  v1.0.42 — Windows: pythonnet fallback error redirected to WebView2 install dialog
+  v1.0.43 — Windows: dropped pywebview entirely; app opens in default browser (no WebView2/DLL needed)
 
 Run with:
   .venv/bin/python -m pytest tests/ -v
@@ -512,47 +514,50 @@ class TestAuthRequired:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestWindowsBuildConfig:
-    """v1.0.41 — pythonnet must not be bundled in the Windows PyInstaller build.
+    """v1.0.43 — Windows spec must not bundle pywebview or pythonnet at all.
 
-    Root cause: collect_all("webview") pulled in every pywebview backend including
-    the MSHTML/pythonnet one. On machines without .NET, Python.Runtime.dll threw
-    "Failed to resolve Python.Runtime.Loader.Initialize" before the window opened.
-    Fix: exclude pythonnet, clr, and webview.platforms.mshtml from the spec.
+    Windows now uses browser mode: Flask + webbrowser.open(). No WebView2,
+    no .NET, no DLLs — works on any machine with Chrome or Edge installed.
     """
 
     _SPEC = os.path.join(_PROJECT, "build", "WA_Outreach_win.spec")
 
-    def test_spec_excludes_pythonnet(self):
-        """pythonnet must appear in the excludes list of the Windows spec."""
+    def _read(self):
         with open(self._SPEC, encoding="utf-8") as f:
-            content = f.read()
-        assert '"pythonnet"' in content, \
-            'pythonnet is not in excludes — it will be bundled and crash on machines without .NET'
+            return f.read()
+
+    def test_spec_excludes_pythonnet(self):
+        """pythonnet must be in the excludes list."""
+        assert '"pythonnet"' in self._read(), \
+            'pythonnet is not excluded — may be pulled in transitively'
 
     def test_spec_excludes_clr(self):
-        """clr (the pythonnet import name) must also be excluded."""
-        with open(self._SPEC, encoding="utf-8") as f:
-            content = f.read()
-        assert '"clr"' in content, \
-            'clr (pythonnet import alias) is not excluded — pythonnet may still be pulled in'
+        """clr (pythonnet alias) must be excluded."""
+        assert '"clr"' in self._read(), \
+            'clr is not excluded — pythonnet may still be loaded'
 
-    def test_spec_excludes_mshtml_backend(self):
-        """webview.platforms.mshtml must be excluded (it imports pythonnet)."""
-        with open(self._SPEC, encoding="utf-8") as f:
-            content = f.read()
-        assert '"webview.platforms.mshtml"' in content, \
-            'webview.platforms.mshtml is not excluded — pywebview may try to use it and fail'
+    def test_spec_excludes_webview(self):
+        """pywebview must not be bundled — Windows uses browser mode."""
+        content = self._read()
+        assert '"webview"' in content, \
+            'webview is not in excludes — pywebview may be bundled unnecessarily'
 
-    def test_spec_keeps_edgechromium_backend(self):
-        """webview.platforms.edgechromium must remain in hiddenimports."""
-        with open(self._SPEC, encoding="utf-8") as f:
-            content = f.read()
-        assert '"webview.platforms.edgechromium"' in content, \
-            'edgechromium backend is missing from hiddenimports — WebView2 window will not open'
+    def test_spec_has_no_collect_all_webview(self):
+        """collect_all("webview") must not appear — it pulls in all backends."""
+        assert 'collect_all("webview")' not in self._read(), \
+            'collect_all("webview") found in spec — removes all pywebview backends including mshtml'
+
+    def test_spec_has_no_webview_hiddenimports(self):
+        """webview must not appear in hiddenimports."""
+        # edgechromium in hiddenimports would pull in WebView2Loader.dll dependency
+        content = self._read()
+        assert '"webview.platforms.edgechromium"' not in content or \
+               content.index('"webview.platforms.edgechromium"') > content.find("excludes"), \
+            'webview.platforms.edgechromium is in hiddenimports — should be in excludes only'
 
 
 class TestWindowsStartupConfig:
-    """v1.0.41 — main.py must force the EdgeChromium backend before importing webview."""
+    """v1.0.43 — main.py must use browser mode on Windows, not pywebview."""
 
     _MAIN = os.path.join(_PROJECT, "main.py")
 
@@ -560,58 +565,45 @@ class TestWindowsStartupConfig:
         with open(self._MAIN, encoding="utf-8") as f:
             return f.read()
 
-    def test_pywebview_gui_env_set_before_import(self):
-        """PYWEBVIEW_GUI=edgechromium must be set BEFORE 'import webview'.
+    def test_webview_import_guarded_to_non_windows(self):
+        """import webview must only happen on non-Windows platforms.
 
-        If set after the import, pywebview has already decided which backend to use
-        and the env var has no effect — pythonnet would still be initialised.
+        On Windows we use the default browser — pywebview is never imported,
+        so WebView2/DLL issues cannot occur.
         """
         content = self._read()
-        gui_pos = content.find("PYWEBVIEW_GUI")
         import_pos = content.find("import webview")
-        assert gui_pos != -1, "PYWEBVIEW_GUI env var not set in main.py"
         assert import_pos != -1, "import webview not found in main.py"
-        assert gui_pos < import_pos, \
-            "PYWEBVIEW_GUI must be set BEFORE 'import webview' — currently set after"
+        # The platform guard must appear somewhere BEFORE the import in the file
+        guard_pos = content.rfind('sys.platform != "win32"', 0, import_pos)
+        assert guard_pos != -1, \
+            ("'import webview' is not guarded by sys.platform != 'win32' — "
+             "pywebview will be imported on Windows too, causing WebView2 errors")
 
-    def test_pywebview_gui_value_is_edgechromium(self):
-        """The value must be 'edgechromium', not any other backend."""
+    def test_windows_uses_webbrowser_module(self):
+        """Windows path must use webbrowser.open() to launch the default browser."""
         content = self._read()
-        assert '"edgechromium"' in content or "'edgechromium'" in content, \
-            "PYWEBVIEW_GUI is not set to 'edgechromium'"
+        assert "webbrowser" in content, \
+            "webbrowser module not used — Windows browser mode not implemented"
+        assert "webbrowser.open" in content, \
+            "webbrowser.open() not called — browser won't open automatically on Windows"
 
-    def test_pywebview_gui_guarded_to_win32(self):
-        """Setting PYWEBVIEW_GUI must be inside a sys.platform == 'win32' guard."""
+    def test_windows_shows_quit_dialog(self):
+        """Windows must show a dialog to keep the process alive and provide a quit button."""
         content = self._read()
-        # Find the block that sets PYWEBVIEW_GUI and confirm win32 check is nearby
-        gui_pos = content.find("PYWEBVIEW_GUI")
-        surrounding = content[max(0, gui_pos - 100): gui_pos + 100]
-        assert "win32" in surrounding, \
-            "PYWEBVIEW_GUI should only be set on win32 — missing platform guard"
+        # MessageBoxW keeps the process running until the user clicks OK
+        assert "MessageBoxW" in content, \
+            "No Windows quit dialog found — process will exit immediately after opening browser"
 
-    def test_webview2_missing_error_is_handled(self):
-        """main.py must catch WebView2 errors and show a friendly install message."""
+    def test_second_instance_opens_browser(self):
+        """A second instance of the exe should open the browser, not silently exit."""
         content = self._read()
-        assert "WebView2" in content or "webview2" in content.lower(), \
-            "No WebView2 error handler found in main.py"
-        assert "developer.microsoft.com" in content or "microsoft.com" in content, \
-            "WebView2 error message should include the download URL"
-
-    def test_pythonnet_fallback_error_caught(self):
-        """When WebView2 is missing, pywebview throws 'pythonnet' error as fallback.
-        main.py must catch that message and show the WebView2 install dialog, not
-        the generic 'The app failed to start' message (v1.0.42 fix).
-        """
-        content = self._read()
-        # The error handler in main() checks msg content to decide which dialog to show.
-        # It must include a "pythonnet" check — pywebview's exact fallback message is
-        # "You must have pythonnet installed in order to use pywebview."
-        main_fn = content[content.find("def main():"):]
-        assert "pythonnet" in main_fn.lower(), \
-            ('main.py WebView2 error guard does not check for "pythonnet". '
-             "When WebView2 is missing, pywebview throws "
-             "'You must have pythonnet installed' — this must be caught and "
-             "redirected to the WebView2 install instructions.")
+        # Find the _run() function body and check the lock-failure branch
+        run_fn = content[content.find("def _run():"):]
+        lock_fail_block = run_fn[run_fn.find("_acquire_instance_lock"):
+                                 run_fn.find("_acquire_instance_lock") + 300]
+        assert "webbrowser" in lock_fail_block, \
+            "Second instance does not open the browser — user gets no feedback"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

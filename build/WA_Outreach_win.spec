@@ -3,37 +3,32 @@
 #   pyinstaller build\WA_Outreach_win.spec --clean --noconfirm
 #
 # Output: dist\WA Outreach\WA Outreach.exe
+#
+# Windows mode: the app opens in the user's default browser (Chrome/Edge).
+# pywebview is NOT used on Windows — zero WebView2/.NET dependency.
 
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_all
 
 PROJECT = Path(SPECPATH).parent   # noqa: F821
 
 block_cipher = None
 
-# Collect pywebview package data, binaries and hidden imports up front
-_wv_datas, _wv_bins, _wv_hidden = collect_all("webview")
-
 a = Analysis(
     [str(PROJECT / "main.py")],
     pathex=[str(PROJECT)],
-    binaries=_wv_bins,
+    binaries=[],
     datas=[
-        (str(PROJECT / "public"),        "public"),
-        (str(PROJECT / "config"),        "config"),
-        (str(PROJECT / "src"),           "src"),
-        (str(PROJECT / "assets"),        "assets"),
+        (str(PROJECT / "public"),  "public"),
+        (str(PROJECT / "config"),  "config"),
+        (str(PROJECT / "src"),     "src"),
+        (str(PROJECT / "assets"),  "assets"),
         *([( str(PROJECT / ".env"), ".")] if (PROJECT / ".env").exists() else []),
-        *_wv_datas,
     ],
     hiddenimports=[
         # Flask / Werkzeug
         "flask",
         "flask.templating",
         "werkzeug.serving",
-        # pywebview Windows backend (WebView2/Edge — no .NET needed)
-        "webview",
-        "webview.platforms.edgechromium",
         # Playwright
         "playwright",
         "playwright.sync_api",
@@ -47,17 +42,19 @@ a = Analysis(
         "openpyxl",
         "openpyxl.styles",
         "openpyxl.utils",
-        *_wv_hidden,
     ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter", "PyQt5", "PyQt6", "PySide2", "PySide6",
-              # Exclude pythonnet/.NET bridge — we force EdgeChromium (WebView2) via
-              # PYWEBVIEW_GUI=edgechromium, so the MSHTML/pythonnet backend is never used.
-              # Without this exclusion, pywebview tries to initialise pythonnet at import
-              # time and crashes on machines where .NET is missing or mismatched.
-              "pythonnet", "clr", "webview.platforms.mshtml"],
+    excludes=[
+        "tkinter",
+        "PyQt5", "PyQt6", "PySide2", "PySide6",
+        # pywebview and all its backends — not used on Windows (browser mode instead)
+        "webview", "webview.platforms.edgechromium", "webview.platforms.mshtml",
+        "webview.platforms.cef", "webview.platforms.gtk", "webview.platforms.qt",
+        # pythonnet/.NET bridge — never needed
+        "pythonnet", "clr",
+    ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
