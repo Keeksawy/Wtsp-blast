@@ -52,7 +52,12 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter", "PyQt5", "PyQt6", "PySide2", "PySide6"],
+    excludes=["tkinter", "PyQt5", "PyQt6", "PySide2", "PySide6",
+              # Exclude pythonnet/.NET bridge — we force EdgeChromium (WebView2) via
+              # PYWEBVIEW_GUI=edgechromium, so the MSHTML/pythonnet backend is never used.
+              # Without this exclusion, pywebview tries to initialise pythonnet at import
+              # time and crashes on machines where .NET is missing or mismatched.
+              "pythonnet", "clr", "webview.platforms.mshtml"],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
