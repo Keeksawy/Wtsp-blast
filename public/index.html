@@ -376,15 +376,21 @@
 
         <div class="card" style="margin-bottom:16px">
           <div class="card-header">
-            <h2 class="card-title">Sending Delay</h2>
+            <h2 class="card-title">Sending Limits</h2>
           </div>
-          <p class="hint">Applies to every send in strict rotation across active numbers. Per-number daily caps are set on each number.</p>
-          <div class="form-row" style="align-items:center">
+          <p class="hint">Controls how fast messages are sent. The daily cap applies equally to every connected number.</p>
+          <div class="form-row" style="align-items:center;margin-bottom:10px">
             <label class="field-label" style="white-space:nowrap">
               Delay between sends (seconds):&nbsp;
               min <input id="delay-min" type="number" min="5" style="width:72px;display:inline-block">
               &nbsp;–&nbsp;
               max <input id="delay-max" type="number" min="5" style="width:72px;display:inline-block">
+            </label>
+          </div>
+          <div class="form-row" style="align-items:center">
+            <label class="field-label" style="white-space:nowrap">
+              Messages per number per day:&nbsp;
+              <input id="daily-cap-per-number" type="number" min="1" style="width:80px;display:inline-block">
             </label>
             <button class="btn-secondary" onclick="saveSettings()">Save</button>
           </div>

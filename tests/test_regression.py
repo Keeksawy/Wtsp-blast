@@ -628,3 +628,126 @@ class TestWindowsDataDirectory:
             "Windows data dir branch references macOS 'Library' path"
         assert "dirname" in windows_branch, \
             "Windows data dir should be beside the exe (os.path.dirname(exe_path))"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 14. Configurable daily cap per number (v1.0.44)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestConfigurableDailyCap:
+    """v1.0.44 — warmup ramp removed; user-controlled global daily cap added.
+
+    - Default cap is 50 messages per number per day.
+    - Cap is stored in settings as dailyCapPerNumber.
+    - POST /api/settings accepts and persists dailyCapPerNumber.
+    - GET /api/settings returns dailyCapPerNumber.
+    - safety.get_daily_cap_for_number and safety.should_auto_pause no longer exist.
+    - GET /api/numbers returns dailyCap from global setting (not per-number override).
+    - GET /api/numbers returns optOutRate and failRate per number.
+    - Dashboard GET /api/dashboard returns optOutRate and failRate in byNumber.
+    """
+
+    def test_default_cap_is_50(self, client):
+        """Fresh db must have dailyCapPerNumber = 50."""
+        token, _ = _register(client)
+        r = client.get("/api/settings", headers=_auth(token))
+        assert r.status_code == 200
+        assert r.get_json().get("dailyCapPerNumber") == 50
+
+    def test_save_and_load_cap(self, client):
+        """POST /api/settings with dailyCapPerNumber persists the value."""
+        token, _ = _register(client)
+        r = client.post("/api/settings",
+                        json={"dailyCapPerNumber": 120},
+                        headers=_auth(token),
+                        content_type="application/json")
+        assert r.status_code == 200
+        assert r.get_json().get("dailyCapPerNumber") == 120
+        # verify GET reflects new value
+        r2 = client.get("/api/settings", headers=_auth(token))
+        assert r2.get_json().get("dailyCapPerNumber") == 120
+
+    def test_cap_minimum_is_1(self, client):
+        """dailyCapPerNumber must be at least 1 (0 or negative clamped to 1)."""
+        token, _ = _register(client)
+        r = client.post("/api/settings",
+                        json={"dailyCapPerNumber": 0},
+                        headers=_auth(token),
+                        content_type="application/json")
+        assert r.status_code == 200
+        assert r.get_json().get("dailyCapPerNumber") >= 1
+
+    def test_numbers_returns_global_cap(self, client):
+        """GET /api/numbers must include dailyCap equal to the global setting."""
+        token, _ = _register(client)
+        # set a custom cap
+        client.post("/api/settings",
+                    json={"dailyCapPerNumber": 75},
+                    headers=_auth(token),
+                    content_type="application/json")
+        db.add_number({"id": "NUM-CAP", "label": "Cap Test", "status": "connected", "paused": False})
+        r = client.get("/api/numbers", headers=_auth(token))
+        assert r.status_code == 200
+        nums = r.get_json()
+        assert any(n["dailyCap"] == 75 for n in nums), \
+            f"Expected dailyCap=75 in numbers response: {nums}"
+
+    def test_numbers_returns_opt_out_and_fail_rates(self, client):
+        """GET /api/numbers must return optOutRate and failRate keys."""
+        token, _ = _register(client)
+        db.add_number({"id": "NUM-RATE", "label": "Rate Test", "status": "connected", "paused": False})
+        r = client.get("/api/numbers", headers=_auth(token))
+        assert r.status_code == 200
+        nums = r.get_json()
+        n = next((x for x in nums if x["id"] == "NUM-RATE"), None)
+        assert n is not None
+        assert "optOutRate" in n
+        assert "failRate" in n
+
+    def test_warmup_ramp_removed_from_defaults(self):
+        """config/defaults.py must not contain warmup_ramp."""
+        from config.defaults import DEFAULTS
+        assert "warmup_ramp" not in DEFAULTS, \
+            "warmup_ramp still present in defaults — should be removed"
+
+    def test_auto_pause_removed_from_defaults(self):
+        """config/defaults.py must not contain auto_pause."""
+        from config.defaults import DEFAULTS
+        assert "auto_pause" not in DEFAULTS, \
+            "auto_pause still present in defaults — should be removed"
+
+    def test_get_daily_cap_function_removed_from_safety(self):
+        """safety.get_daily_cap_for_number must not exist (replaced by global setting)."""
+        from src import safety
+        assert not hasattr(safety, "get_daily_cap_for_number"), \
+            "get_daily_cap_for_number still exists in safety.py — warmup ramp logic not removed"
+
+    def test_should_auto_pause_removed_from_safety(self):
+        """safety.should_auto_pause must not exist (removed per user request)."""
+        from src import safety
+        assert not hasattr(safety, "should_auto_pause"), \
+            "should_auto_pause still exists in safety.py — auto-pause logic not removed"
+
+    def test_per_number_cap_route_removed(self, client):
+        """POST /api/numbers/<id>/cap route must no longer exist (returns 404 or 405)."""
+        token, _ = _register(client)
+        db.add_number({"id": 999, "label": "Old Cap", "status": "connected", "paused": False})
+        r = client.post("/api/numbers/999/cap",
+                        json={"dailyCapOverride": 100},
+                        headers=_auth(token),
+                        content_type="application/json")
+        assert r.status_code in (404, 405), \
+            f"Expected 404/405 for removed /cap route, got {r.status_code}"
+
+    def test_dashboard_includes_opt_out_and_fail_rates(self, client):
+        """GET /api/dashboard byNumber must include optOutRate and failRate."""
+        token, _ = _register(client)
+        db.add_number({"id": "NUM-DASH", "label": "Dash Test", "status": "connected", "paused": False})
+        r = client.get("/api/dashboard", headers=_auth(token))
+        assert r.status_code == 200
+        data = r.get_json()
+        by_number = data.get("byNumber", [])
+        assert len(by_number) > 0
+        n = by_number[0]
+        assert "optOutRate" in n, f"optOutRate missing from dashboard byNumber: {n}"
+        assert "failRate" in n, f"failRate missing from dashboard byNumber: {n}"

@@ -21,7 +21,7 @@ def _empty_state():
         "users": [],
         "sessions": [],
         "meta": {"next_contact_seq": 1, "next_number_seq": 1, "next_message_seq": 1, "next_user_seq": 1},
-        "settings": {"delayMinSeconds": 30, "delayMaxSeconds": 100, "initialTemplateOverrides": {}, "crmWebhookUrl": ""},
+        "settings": {"delayMinSeconds": 30, "delayMaxSeconds": 100, "dailyCapPerNumber": 50, "initialTemplateOverrides": {}, "crmWebhookUrl": ""},
     }
 
 

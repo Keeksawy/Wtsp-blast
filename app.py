@@ -229,13 +229,21 @@ def change_password(user_id):
 def get_numbers():
     messages = db.get_messages()
     out = []
+    daily_cap = db.get_settings().get("dailyCapPerNumber", 50)
     for n in db.get_numbers():
+        sent = [m for m in messages if m.get("numberId") == n["id"] and m.get("direction") == "outbound"]
+        opt_outs = len([m for m in sent if m.get("resultedInOptOut")])
+        failed = len([m for m in sent if m.get("status") in ("failed", "undeliverable")])
+        opt_out_rate = round(opt_outs / len(sent) * 100, 1) if sent else None
+        fail_rate = round(failed / len(sent) * 100, 1) if sent else None
         out.append({
             **n,
             "qr": wa_manager.get_qr(n["id"]),
-            "dailyCap": safety.get_daily_cap_for_number(n, cfg),
+            "dailyCap": daily_cap,
             "sentToday": safety.count_sent_today(n["id"], messages),
             "replyRate": safety.get_reply_rate_status(n["id"], messages, cfg),
+            "optOutRate": opt_out_rate,
+            "failRate": fail_rate,
         })
     return jsonify(out)
 
@@ -273,13 +281,6 @@ def reconnect_number(number_id):
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-
-@app.route("/api/numbers/<int:number_id>/cap", methods=["POST"])
-def set_cap(number_id):
-    body = request.get_json(silent=True) or {}
-    db.update_number(number_id, {"dailyCapOverride": body.get("dailyCapOverride") or None})
-    return jsonify(db.find_number_by_id(number_id))
 
 
 
@@ -464,6 +465,11 @@ def update_settings_route():
         patch["companyName"] = str(body["companyName"]).strip()
     if "defaultAgentName" in body:
         patch["defaultAgentName"] = str(body["defaultAgentName"]).strip()
+    if "dailyCapPerNumber" in body:
+        try:
+            patch["dailyCapPerNumber"] = max(1, int(body["dailyCapPerNumber"]))
+        except (TypeError, ValueError):
+            return jsonify({"error": "dailyCapPerNumber must be a number"}), 400
     settings = db.update_settings(patch)
     return jsonify(settings)
 
@@ -477,15 +483,20 @@ def dashboard_route():
     inbound = [m for m in messages if m.get("direction") == "inbound"]
 
     numbers = db.get_numbers()
+    daily_cap = db.get_settings().get("dailyCapPerNumber", 50)
     by_number = []
     for n in numbers:
         sent = [m for m in outbound if m.get("numberId") == n["id"]]
         delivered = [m for m in sent if m.get("status") == "sent"]
         optouts = len([m for m in sent if m.get("resultedInOptOut")])
+        failed = len([m for m in sent if m.get("status") in ("failed", "undeliverable")])
+        opt_out_rate = round(optouts / len(sent) * 100, 1) if sent else None
+        fail_rate = round(failed / len(sent) * 100, 1) if sent else None
         by_number.append({
             "numberId": n["id"], "label": n["label"], "status": n["status"], "paused": n.get("paused"),
             "sends": len(sent), "delivered": len(delivered), "optOuts": optouts,
-            "dailyCap": safety.get_daily_cap_for_number(n, cfg), "sentToday": safety.count_sent_today(n["id"], messages),
+            "optOutRate": opt_out_rate, "failRate": fail_rate,
+            "dailyCap": daily_cap, "sentToday": safety.count_sent_today(n["id"], messages),
             "replyRate": safety.get_reply_rate_status(n["id"], messages, cfg),
         })
 

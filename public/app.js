@@ -292,11 +292,13 @@ async function refreshSettings() {
   const s = await jget('/api/settings');
   const minEl     = document.getElementById('delay-min');
   const maxEl     = document.getElementById('delay-max');
+  const capEl     = document.getElementById('daily-cap-per-number');
   const crmEl     = document.getElementById('crm-webhook-url');
   const coEl      = document.getElementById('company-name');
   const agentEl   = document.getElementById('default-agent-name');
   if (minEl)   minEl.value   = s.delayMinSeconds;
   if (maxEl)   maxEl.value   = s.delayMaxSeconds;
+  if (capEl)   capEl.value   = s.dailyCapPerNumber != null ? s.dailyCapPerNumber : 50;
   if (crmEl)   crmEl.value   = s.crmWebhookUrl     || '';
   if (coEl)    coEl.value    = s.companyName        || '';
   if (agentEl) agentEl.value = s.defaultAgentName   || '';
@@ -305,10 +307,14 @@ async function refreshSettings() {
 async function saveSettings() {
   const delayMinSeconds  = parseInt(document.getElementById('delay-min').value, 10);
   const delayMaxSeconds  = parseInt(document.getElementById('delay-max').value, 10);
+  const capEl            = document.getElementById('daily-cap-per-number');
+  const dailyCapPerNumber = capEl ? parseInt(capEl.value, 10) : undefined;
   const crmWebhookUrl    = (document.getElementById('crm-webhook-url').value    || '').trim();
   const companyName      = (document.getElementById('company-name').value        || '').trim();
   const defaultAgentName = (document.getElementById('default-agent-name').value  || '').trim();
-  await jpost('/api/settings', { delayMinSeconds, delayMaxSeconds, crmWebhookUrl, companyName, defaultAgentName });
+  const payload = { delayMinSeconds, delayMaxSeconds, crmWebhookUrl, companyName, defaultAgentName };
+  if (dailyCapPerNumber != null && !isNaN(dailyCapPerNumber)) payload.dailyCapPerNumber = dailyCapPerNumber;
+  await jpost('/api/settings', payload);
   document.getElementById('settings-result').innerHTML = '<p class="hint">Settings saved.</p>';
   refreshSettings();
 }
@@ -407,6 +413,8 @@ async function refreshNumbers() {
             Sent today: ${n.sentToday}/${n.dailyCap}
             ${n.pauseReason ? ' · ' + n.pauseReason : ''}
             · Reply rate: ${replyRateLabel(n.replyRate)}
+            · Opt-outs: ${n.optOutRate != null ? n.optOutRate + '%' : 'n/a'}
+            · Failed: ${n.failRate != null ? n.failRate + '%' : 'n/a'}
           </div>
         </div>
         <span class="number-status-pill">${statusText(n)}${n.paused ? ' · Paused' : ''}</span>
@@ -677,13 +685,14 @@ async function refreshDashboard() {
   if (byNumEl) {
     byNumEl.innerHTML = `
       <table>
-        <tr><th>Number</th><th>Status</th><th>Total Sends</th><th>Delivered</th><th>Opt-outs</th><th>Today</th><th>Reply rate</th></tr>
+        <tr><th>Number</th><th>Status</th><th>Total Sends</th><th>Delivered</th><th>Opt-out rate</th><th>Fail rate</th><th>Today</th><th>Reply rate</th></tr>
         ${(d.byNumber || []).map(n => `<tr>
           <td>${escHtml(n.label)}</td>
           <td>${n.status}${n.paused ? ' · Paused' : ''}</td>
           <td>${n.sends}</td>
           <td>${n.delivered}</td>
-          <td>${n.optOuts}</td>
+          <td>${n.optOutRate != null ? n.optOutRate + '%' : 'n/a'}</td>
+          <td>${n.failRate != null ? n.failRate + '%' : 'n/a'}</td>
           <td>${n.sentToday}/${n.dailyCap}</td>
           <td>${replyRateLabel(n.replyRate)}</td>
         </tr>`).join('')}

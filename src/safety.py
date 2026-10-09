@@ -59,18 +59,6 @@ def days_since(iso_date_string, now=None):
     return (now - then).total_seconds() / 86400.0
 
 
-def get_daily_cap_for_number(number, cfg, now=None):
-    now = now or datetime.utcnow()
-    if number.get("dailyCapOverride"):
-        return number["dailyCapOverride"]
-    active_days = days_since(number.get("activatedAt"), now) if number.get("activatedAt") else 0
-    cap = cfg["warmup_ramp"][0]["daily_cap"]
-    for step in cfg["warmup_ramp"]:
-        if active_days >= step["min_days_active"]:
-            cap = step["daily_cap"]
-    return min(cap, cfg["steady_state_daily_cap_default"])
-
-
 def count_sent_today(number_id, messages, now=None):
     now = now or datetime.utcnow()
     start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -152,31 +140,3 @@ def get_reply_rate_status(number_id, messages, cfg, now=None):
     return {**stats, "status": status}
 
 
-def should_auto_pause(number_id, messages, cfg, now=None):
-    now = now or datetime.utcnow()
-    sent = [m for m in messages if m.get("numberId") == number_id and m.get("direction") == "outbound"]
-    if len(sent) >= cfg["auto_pause"]["min_sends_before_evaluating"]:
-        opt_outs = len([m for m in sent if m.get("resultedInOptOut")])
-        failed = len([m for m in sent if m.get("status") in ("failed", "undeliverable")])
-        opt_out_rate = opt_outs / len(sent)
-        fail_rate = failed / len(sent)
-        if opt_out_rate > cfg["auto_pause"]["max_opt_out_rate"]:
-            return {"pause": True, "reason": f"Opt-out rate {opt_out_rate * 100:.1f}% exceeds threshold"}
-        if fail_rate > cfg["auto_pause"]["max_undelivered_rate"]:
-            return {"pause": True, "reason": f"Undelivered/failed rate {fail_rate * 100:.1f}% exceeds threshold"}
-
-    reply_stats = compute_reply_stats(number_id, messages, cfg, now)
-    if (reply_stats["total"] >= cfg["reply_monitoring"]["min_evaluable_contacts"]
-            and reply_stats["replyRate"] is not None
-            and reply_stats["replyRate"] <= cfg["reply_monitoring"]["pause_below_reply_rate"]):
-        pct = cfg["reply_monitoring"]["pause_below_reply_rate"] * 100
-        return {
-            "pause": True,
-            "reason": (
-                f"Reply rate {reply_stats['replyRate'] * 100:.1f}% "
-                f"({reply_stats['replied']}/{reply_stats['total']}) at/below the {pct:.0f}% "
-                "threshold — near-zero engagement reads as spam regardless of volume"
-            ),
-        }
-
-    return {"pause": False, "reason": None}

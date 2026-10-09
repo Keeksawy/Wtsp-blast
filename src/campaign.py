@@ -89,14 +89,8 @@ class CampaignRunner:
                 if not number or number.get("status") != "connected" or number.get("paused"):
                     continue
 
-                check = safety.should_auto_pause(number_id, db.get_messages(), self.cfg)
-                if check["pause"]:
-                    db.update_number(number_id, {"paused": True, "pauseReason": f"Auto-paused: {check['reason']}"})
-                    self.wa_manager._emit("status", {"numberId": number_id, "status": "auto_paused", "reason": check["reason"]})
-                    continue
-
                 now = datetime.now()
-                cap = safety.get_daily_cap_for_number(number, self.cfg, now)
+                cap = db.get_settings().get("dailyCapPerNumber", 50)
                 sent_today = safety.count_sent_today(number_id, db.get_messages(), now)
                 if sent_today >= cap:
                     continue
