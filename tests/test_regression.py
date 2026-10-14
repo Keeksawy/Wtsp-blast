@@ -756,7 +756,41 @@ class TestConfigurableDailyCap:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 15. Outbound echo not treated as inbound reply (v1.0.45)
+# 15. Inbox reply text box clears after send (v1.0.46)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestInboxReplyClear:
+    """v1.0.46 — After a successful inbox reply, app.js must clear the textarea
+    before re-rendering the thread. Previously the draft was snapshotted while
+    still containing the sent text and then restored into the new textarea.
+
+    We test this at the JS source level (static analysis) since the fix is a
+    one-liner: input.value = '' before refreshInbox() / renderInboxThread().
+    """
+
+    def test_input_cleared_before_rerender(self):
+        """app.js must clear input.value before calling refreshInbox on a successful reply."""
+        import re
+        with open(os.path.join(_PROJECT, "public", "app.js"), encoding="utf-8") as f:
+            content = f.read()
+
+        # Find the sendReply function (grab enough to include the whole body)
+        fn_start = content.find("async function sendReply(")
+        assert fn_start != -1, "sendReply function not found in app.js"
+        fn_body = content[fn_start: fn_start + 1200]
+
+        # The clear must happen inside the r.ok branch, before refreshInbox
+        ok_branch = fn_body[fn_body.find("if (r.ok)"):]
+        clear_pos = ok_branch.find("input.value")
+        refresh_pos = ok_branch.find("refreshInbox")
+        assert clear_pos != -1, \
+            "input.value = '' not found in the r.ok branch of sendReply — textarea is not cleared on success"
+        assert clear_pos < refresh_pos, \
+            "input.value must be cleared BEFORE refreshInbox() is called — otherwise the draft gets snapshotted and restored"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 17. Outbound echo not treated as inbound reply (v1.0.45)
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestOutboundEchoRejection:

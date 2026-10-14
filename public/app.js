@@ -1024,6 +1024,7 @@ async function sendReply(contactId, numberId, inputId) {
   const r = await jpost('/api/inbox/reply', { contactId, numberId, text });
   _inboxSending = false;
   if (r.ok) {
+    if (input) input.value = '';  // clear before re-render snapshots the draft
     await refreshInbox();
     renderInboxThread(_selectedConvId);
   } else {
