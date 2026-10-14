@@ -682,13 +682,13 @@ class NumberSession:
                 if clean in page_outbound:
                     return True
                 if any(
-                    clean.startswith(ob[:40]) or ob.startswith(clean[:40])
-                    for ob in page_outbound if len(ob) > 5
+                    clean.startswith(ob[:80]) or ob.startswith(clean[:80])
+                    for ob in page_outbound if len(ob) > 10
                 ):
                     return True
                 if any(
-                    clean.startswith(ob[:40]) or ob.startswith(clean[:40])
-                    for ob in known_outbound if len(ob) > 5
+                    clean.startswith(ob[:80]) or ob.startswith(clean[:80])
+                    for ob in known_outbound if len(ob) > 10
                 ):
                     return True
                 return False
@@ -763,6 +763,18 @@ class NumberSession:
         if not body or not body.strip():
             return
         body = body.strip()
+
+        # Echo guard: reject if the body matches a message WE sent.
+        # WhatsApp sometimes delivers our own sent messages back to the session
+        # (e.g. via linked-devices echo or a server re-delivery), causing them to
+        # appear as customer replies with message-in CSS class. Checking against the
+        # DB is the most reliable layer — it works regardless of WhatsApp class names.
+        all_outbound = db.get_messages(direction="outbound")
+        body_prefix = body[:100]
+        for om in all_outbound:
+            ob = (om.get("body") or "").strip()
+            if len(ob) >= 20 and ob[:100] == body_prefix:
+                return
 
         # In-memory dedup (fast path within session)
         dedup_key = (chat_phone_e164 or chat_name or "", body[:60])

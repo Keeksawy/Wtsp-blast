@@ -1,7 +1,7 @@
 """
-Regression tests for WA Outreach v1.0.41.
+Regression tests for WA Outreach v1.0.41+.
 
-Covers every bug fixed between v1.0.33 and v1.0.41:
+Covers every bug fixed between v1.0.33 and v1.0.45:
   v1.0.35 — first user auto-admin; reset button available to all users
   v1.0.37 — requeue sets messageStatus=""; not-interested/do-not-contact sets notInterested=True
   v1.0.38 — contact import includes invalid-phone rows (not silently dropped)
@@ -10,6 +10,8 @@ Covers every bug fixed between v1.0.33 and v1.0.41:
   v1.0.41 — Windows: pythonnet excluded from bundle
   v1.0.42 — Windows: pythonnet fallback error redirected to WebView2 install dialog
   v1.0.43 — Windows: dropped pywebview entirely; app opens in default browser (no WebView2/DLL needed)
+  v1.0.44 — configurable daily cap per number; warmup ramp and auto-pause removed
+  v1.0.45 — outbound echo messages no longer treated as customer replies or sell/rent intent
 
 Run with:
   .venv/bin/python -m pytest tests/ -v
@@ -751,3 +753,116 @@ class TestConfigurableDailyCap:
         n = by_number[0]
         assert "optOutRate" in n, f"optOutRate missing from dashboard byNumber: {n}"
         assert "failRate" in n, f"failRate missing from dashboard byNumber: {n}"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 15. Outbound echo not treated as inbound reply (v1.0.45)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestOutboundEchoRejection:
+    """v1.0.45 — WhatsApp linked-devices sometimes delivers our own sent message
+    back to the session, making it look like a customer reply (with message-in
+    CSS class). _handle_inbound must reject these echoes using DB outbound bodies,
+    not CSS class names (which WhatsApp changes periodically).
+
+    The echo bug caused:
+      - The sent message appearing in the inbox as a customer reply.
+      - The sell/rent keyword detection firing on our own template text
+        (e.g. "would you consider selling?") and marking the contact as sell intent.
+    """
+
+    def test_echo_of_outbound_not_stored_as_inbound(self, client):
+        """If the scraped body exactly matches a sent outbound message,
+        _handle_inbound must discard it."""
+        token, _ = _register(client)
+        # Import a contact and log an outbound message for them
+        client.post("/api/contacts/import-rows",
+                    json={"rows": [{"ownerName": "Echo Test", "mobile": "+971501110001",
+                                    "unitNumber": "10", "salesAgentId": ""}]},
+                    headers=_auth(token), content_type="application/json")
+        contact = db.get_contacts()[0]
+        sent_body = (
+            "Hi there ECHO TEST,\nAamir here.\n\nI specialise in The Valley.\n"
+            "Just wanted to ask — if the right offer came, would you consider selling?"
+        )
+        db.log_message({
+            "contactId": contact["contactId"], "numberId": "NUM-001",
+            "direction": "outbound", "body": sent_body, "status": "sent",
+        })
+
+        # Simulate _handle_inbound being called with the same text (the echo)
+        from src.whatsapp_manager import NumberSession
+        from unittest.mock import MagicMock
+        mock_manager = MagicMock()
+        mock_manager.cfg = {"opt_out_keywords": [], "sell_keywords": ["selling"], "rent_keywords": []}
+        session = NumberSession.__new__(NumberSession)
+        session.number_id = "NUM-001"
+        session.manager = mock_manager
+        session._seen_inbound = set()
+        session._handle_inbound("+971501110001", "Echo Test", sent_body, realtime=True)
+
+        # No inbound message should have been stored
+        inbound = db.get_messages(direction="inbound")
+        assert len(inbound) == 0, \
+            f"Echo was stored as inbound — _handle_inbound did not reject it: {inbound}"
+
+        # Contact must not be marked as sell intent
+        c = db.find_contact_by_id(contact["contactId"])
+        assert not c.get("selling"), \
+            "Contact marked as sell intent from an outbound echo — keyword detection ran on our own message"
+
+    def test_echo_prefix_match_80_chars(self, client):
+        """Even a partial match on the first 80 chars of the body is enough to reject."""
+        token, _ = _register(client)
+        client.post("/api/contacts/import-rows",
+                    json={"rows": [{"ownerName": "Prefix Test", "mobile": "+971501110002",
+                                    "unitNumber": "20", "salesAgentId": ""}]},
+                    headers=_auth(token), content_type="application/json")
+        contact = db.get_contacts()[0]
+        sent_body = "A" * 120  # long body, first 100 chars are all 'A'
+        db.log_message({
+            "contactId": contact["contactId"], "numberId": "NUM-001",
+            "direction": "outbound", "body": sent_body, "status": "sent",
+        })
+
+        from src.whatsapp_manager import NumberSession
+        from unittest.mock import MagicMock
+        mock_manager = MagicMock()
+        mock_manager.cfg = {"opt_out_keywords": [], "sell_keywords": [], "rent_keywords": []}
+        session = NumberSession.__new__(NumberSession)
+        session.number_id = "NUM-001"
+        session.manager = mock_manager
+        session._seen_inbound = set()
+        # Echo is the exact same 120 'A's
+        session._handle_inbound("+971501110002", "Prefix Test", sent_body, realtime=True)
+
+        inbound = db.get_messages(direction="inbound")
+        assert len(inbound) == 0, "Echo with matching 100-char prefix was stored as inbound"
+
+    def test_genuine_customer_reply_still_stored(self, client):
+        """A real customer reply (different body) must still be accepted."""
+        token, _ = _register(client)
+        client.post("/api/contacts/import-rows",
+                    json={"rows": [{"ownerName": "Real Reply", "mobile": "+971501110003",
+                                    "unitNumber": "30", "salesAgentId": ""}]},
+                    headers=_auth(token), content_type="application/json")
+        contact = db.get_contacts()[0]
+        db.log_message({
+            "contactId": contact["contactId"], "numberId": "NUM-001",
+            "direction": "outbound", "body": "Hi there, would you consider selling?", "status": "sent",
+        })
+
+        from src.whatsapp_manager import NumberSession
+        from unittest.mock import MagicMock
+        mock_manager = MagicMock()
+        mock_manager.cfg = {"opt_out_keywords": [], "sell_keywords": [], "rent_keywords": []}
+        session = NumberSession.__new__(NumberSession)
+        session.number_id = "NUM-001"
+        session.manager = mock_manager
+        session._seen_inbound = set()
+        # Genuine reply — completely different body
+        session._handle_inbound("+971501110003", "Real Reply", "Yes I'm interested", realtime=True)
+
+        inbound = db.get_messages(direction="inbound")
+        assert len(inbound) == 1, \
+            f"Genuine customer reply was rejected as an echo: {inbound}"
