@@ -6,3 +6,4 @@ python-dotenv==1.0.1
 pytest==8.3.3
 Pillow>=10.0.0
 pywebview>=4.3
+xlrd==2.0.1

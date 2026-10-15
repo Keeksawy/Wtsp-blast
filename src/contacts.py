@@ -35,7 +35,8 @@ def _is_header_row(row):
 
 
 _PHONE_RE = re.compile(r"^[\+\d\s\-\(\)]{6,20}$")
-_XLSX_MAGIC = b"PK\x03\x04"  # ZIP magic bytes — every .xlsx starts with this
+_XLSX_MAGIC = b"PK\x03\x04"          # ZIP / Open XML — .xlsx
+_XLS_MAGIC  = b"\xD0\xCF\x11\xE0"   # OLE2 compound document — .xls
 
 
 def _parse_rows(all_rows):
@@ -57,14 +58,22 @@ def _parse_rows(all_rows):
 
 
 def parse_excel_buffer(file_bytes, filename=""):
-    """Parse an uploaded .xlsx or .csv file and return a list of row dicts."""
-    # Detect format: ZIP magic = XLSX; everything else treated as CSV/TSV.
-    is_xlsx = file_bytes[:4] == _XLSX_MAGIC or str(filename).lower().endswith((".xlsx", ".xls"))
+    """Parse an uploaded .xlsx, .xls, or .csv file and return a list of row dicts."""
+    fname = str(filename).lower()
+    magic = file_bytes[:4]
+
+    is_xlsx = magic == _XLSX_MAGIC or fname.endswith(".xlsx")
+    is_xls  = magic == _XLS_MAGIC  or fname.endswith(".xls")
 
     if is_xlsx:
         wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
         sheet = wb[wb.sheetnames[0]]
         all_rows = list(sheet.iter_rows(values_only=True))
+    elif is_xls:
+        import xlrd
+        wb = xlrd.open_workbook(file_contents=file_bytes)
+        sh = wb.sheet_by_index(0)
+        all_rows = [tuple(sh.cell_value(r, c) for c in range(sh.ncols)) for r in range(sh.nrows)]
     else:
         # CSV / TSV — decode with BOM tolerance, auto-detect delimiter
         import csv

@@ -900,3 +900,84 @@ class TestOutboundEchoRejection:
         inbound = db.get_messages(direction="inbound")
         assert len(inbound) == 1, \
             f"Genuine customer reply was rejected as an echo: {inbound}"
+
+
+# ── v1.0.47: .xls support + importFile frontend error guard ──────────────────
+
+class TestXlsSupport:
+    """
+    v1.0.47 — .xls (legacy Excel BIFF) files now parse correctly.
+    Previously the code sent .xls to openpyxl which cannot read BIFF format,
+    causing an unhandled exception and a stuck "Analysing file…" spinner on Windows.
+    """
+
+    def test_xls_file_parses_correctly(self, client):
+        """A real .xls file (OLE2 magic) must be parsed via xlrd."""
+        import io
+        import xlwt
+
+        wb = xlwt.Workbook()
+        ws = wb.add_sheet("Sheet1")
+        ws.write(0, 0, "Owner Name");  ws.write(0, 1, "Mobile Number"); ws.write(0, 2, "Unit Number")
+        ws.write(1, 0, "Test Owner");  ws.write(1, 1, "+971501234567");  ws.write(1, 2, "101")
+        buf = io.BytesIO(); wb.save(buf)
+        xls_bytes = buf.getvalue()
+
+        # Confirm OLE2 magic detected
+        assert xls_bytes[:4] == b"\xD0\xCF\x11\xE0", "test file should be OLE2 format"
+
+        from src.contacts import parse_excel_buffer
+        rows = parse_excel_buffer(xls_bytes, filename="contacts.xls")
+        assert len(rows) == 1
+        assert rows[0]["ownerName"] == "Test Owner"
+        assert rows[0]["mobile"] == "+971501234567"
+
+    def test_xls_upload_via_api(self, client):
+        """/api/contacts/preview accepts .xls uploads and returns valid JSON."""
+        import io
+        import xlwt
+
+        token, _ = _register(client)
+        wb = xlwt.Workbook()
+        ws = wb.add_sheet("Sheet1")
+        ws.write(0, 0, "Owner Name");  ws.write(0, 1, "Mobile Number"); ws.write(0, 2, "Unit Number")
+        ws.write(1, 0, "API Owner");   ws.write(1, 1, "+971509876543");  ws.write(1, 2, "55")
+        buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+
+        r = client.post("/api/contacts/preview",
+                        data={"file": (buf, "contacts.xls")},
+                        headers=_auth(token),
+                        content_type="multipart/form-data")
+        assert r.status_code == 200
+        data = r.get_json()
+        assert "error" not in data
+        assert len(data["ready"]) == 1
+        assert data["ready"][0]["ownerName"] == "API Owner"
+
+    def test_xls_magic_beats_wrong_extension(self, client):
+        """OLE2 magic bytes identify .xls even if extension is missing/wrong."""
+        import io
+        import xlwt
+
+        wb = xlwt.Workbook()
+        ws = wb.add_sheet("Sheet1")
+        ws.write(0, 0, "Owner Name");  ws.write(0, 1, "Mobile Number"); ws.write(0, 2, "Unit Number")
+        ws.write(1, 0, "Magic Test");  ws.write(1, 1, "+971501112222");  ws.write(1, 2, "77")
+        buf = io.BytesIO(); wb.save(buf)
+        xls_bytes = buf.getvalue()
+
+        from src.contacts import parse_excel_buffer
+        # Pass no filename — relies purely on magic bytes
+        rows = parse_excel_buffer(xls_bytes, filename="")
+        assert len(rows) == 1
+        assert rows[0]["ownerName"] == "Magic Test"
+
+    def test_watchdog_message_is_platform_neutral(self):
+        """Watchdog error message must not reference macOS-specific UI paths."""
+        import inspect
+        from src import whatsapp_manager
+        src = inspect.getsource(whatsapp_manager)
+        assert "System Settings" not in src, \
+            "Watchdog message still contains macOS-specific 'System Settings' text"
+        assert "Privacy & Security" not in src, \
+            "Watchdog message still contains macOS-specific 'Privacy & Security' text"

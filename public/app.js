@@ -482,8 +482,14 @@ async function importFile() {
   const fd = new FormData();
   fd.append('file', fileInput.files[0]);
   document.getElementById('import-result').innerHTML = '<p class="hint">Analysing file…</p>';
-  const r = await fetch('/api/contacts/preview', { method: 'POST', body: fd, headers: { 'X-Auth-Token': getToken() } });
-  const preview = await r.json();
+  let preview;
+  try {
+    const r = await fetch('/api/contacts/preview', { method: 'POST', body: fd, headers: { 'X-Auth-Token': getToken() } });
+    preview = await r.json();
+  } catch (err) {
+    document.getElementById('import-result').innerHTML = `<p style="color:red">Could not read file: ${err.message || 'network error'}. Make sure the file is a valid .xlsx, .xls, or .csv.</p>`;
+    return;
+  }
   if (preview.error) {
     document.getElementById('import-result').innerHTML = `<p style="color:red">${preview.error}</p>`;
     return;

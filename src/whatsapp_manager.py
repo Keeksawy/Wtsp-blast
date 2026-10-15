@@ -94,20 +94,21 @@ class NumberSession:
         profile_dir = str(DATA_DIR / self.session_id)
         Path(profile_dir).mkdir(parents=True, exist_ok=True)
 
-        # Watchdog: if the browser never starts (driver hangs silently in a
-        # frozen app), the except block never runs and status stays "initializing"
-        # forever. This timer converts that into a visible error after 90 s.
+        # Watchdog: if the browser never fully starts (driver or context launch
+        # hangs silently in a frozen app), status stays "initializing" forever.
+        # _browser_started is set only AFTER the context and page are ready,
+        # so the watchdog covers the full launch — not just the Playwright init.
         _browser_started = threading.Event()
 
         def _watchdog():
-            if _browser_started.wait(timeout=90):
+            if _browser_started.wait(timeout=120):
                 return
             current = db.find_number_by_id(self.number_id)
             if current and current.get("status") == "initializing":
                 msg = (
-                    "Browser failed to start after 90 s. On macOS go to "
-                    "System Settings → Privacy & Security and allow the app, "
-                    "then click Reconnect."
+                    "Browser failed to start after 120 s. "
+                    "Try clicking Reconnect. If this keeps happening, "
+                    "check that your antivirus is not blocking the app."
                 )
                 db.update_number(self.number_id, {"status": "error", "paused": True, "pauseReason": msg})
                 self.manager._emit("status", {"numberId": self.number_id, "status": "error", "error": msg})
@@ -128,7 +129,6 @@ class NumberSession:
 
         try:
             with sync_playwright() as p:
-                _browser_started.set()  # driver subprocess started — watchdog disarmed
                 try:
                     context = p.chromium.launch_persistent_context(
                         profile_dir, headless=True,
@@ -143,6 +143,7 @@ class NumberSession:
                     )
                 page = context.pages[0] if context.pages else context.new_page()
                 page.goto("https://web.whatsapp.com", timeout=60000)
+                _browser_started.set()  # browser is up and page loaded — watchdog disarmed
                 self._loop(page)
                 context.close()
         except Exception as e:
