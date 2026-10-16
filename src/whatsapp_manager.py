@@ -120,6 +120,11 @@ class NumberSession:
             "--disable-setuid-sandbox",
             "--disable-blink-features=AutomationControlled",
             "--disable-dev-shm-usage",
+            # Prevent Chrome from trying GPU/SwiftShader in headless mode on Windows,
+            # which causes an immediate "Target page, context or browser has been closed"
+            # crash on machines without a supported GPU.
+            "--disable-gpu",
+            "--disable-software-rasterizer",
         ]
         _user_agent = (
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -147,8 +152,15 @@ class NumberSession:
                 self._loop(page)
                 context.close()
         except Exception as e:
-            db.update_number(self.number_id, {"status": "error", "paused": True, "pauseReason": str(e)})
-            self.manager._emit("status", {"numberId": self.number_id, "status": "error", "error": str(e)})
+            # Playwright exceptions include the full browser launch log (all CLI flags).
+            # Extract just the first line so testers see a readable message.
+            raw = str(e)
+            short = raw.splitlines()[0] if raw.splitlines() else raw
+            if len(short) > 200:
+                short = short[:200] + "…"
+            msg = f"{short} — Click Reconnect to try again."
+            db.update_number(self.number_id, {"status": "error", "paused": True, "pauseReason": msg})
+            self.manager._emit("status", {"numberId": self.number_id, "status": "error", "error": msg})
 
     def _loop(self, page):
         connected = False
