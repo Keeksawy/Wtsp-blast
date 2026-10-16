@@ -134,7 +134,7 @@ function navigate(page) {
   if (page === 'dashboard') refreshDashboard();
   if (page === 'numbers')   refreshNumbers();
   if (page === 'contacts')  refreshContacts();
-  if (page === 'campaign')  { refreshTemplates(); refreshNumbers(); }
+  if (page === 'campaign')  { refreshTemplates(); refreshNumbers(); refreshCampaigns(); }
   if (page === 'settings')  { refreshSettings(); if (getRole() === 'admin') refreshUsers(); }
 }
 
@@ -479,6 +479,12 @@ let _importPreview = null;
 async function importFile() {
   const fileInput = document.getElementById('import-file');
   if (!fileInput.files[0]) return alert('Choose a file first');
+  const campaignNameVal = (document.getElementById('campaign-name')?.value || '').trim();
+  if (!campaignNameVal) {
+    document.getElementById('import-result').innerHTML = '<p style="color:var(--danger);font-size:13px">⚠️ Campaign name is required. Enter a name before importing.</p>';
+    document.getElementById('campaign-name')?.focus();
+    return;
+  }
   const fd = new FormData();
   fd.append('file', fileInput.files[0]);
   document.getElementById('import-result').innerHTML = '<p class="hint">Analysing file…</p>';
@@ -596,6 +602,69 @@ async function stopCampaign() {
   await jpost('/api/campaigns/stop', {});
   const el = document.getElementById('assign-result');
   if (el) el.innerHTML = '<p class="hint">All sending stopped.</p>';
+}
+
+// ── Per-campaign management ───────────────────────────────────────────
+async function refreshCampaigns() {
+  const el = document.getElementById('campaigns-list');
+  if (!el) return;
+  const campaigns = await jget('/api/campaigns');
+  if (!Array.isArray(campaigns) || campaigns.length === 0) {
+    el.innerHTML = '<div class="campaign-empty">No campaigns yet. Import contacts on the Contacts page to create one.</div>';
+    return;
+  }
+  el.innerHTML = campaigns.map(c => {
+    const name    = escHtml(c.name);
+    const total   = c.totalContacts ?? 0;
+    const sent    = c.messagesSent  ?? 0;
+    const failed  = c.messagesFailed ?? 0;
+    const queued  = c.messagesQueued ?? 0;
+    const pct     = total > 0 ? Math.round((sent / total) * 100) : 0;
+    const nameAttr = escHtml(c.name).replace(/'/g, '&#39;');
+    return `
+      <div class="campaign-card">
+        <div class="campaign-card-stripe"></div>
+        <div class="campaign-card-body">
+          <div class="campaign-card-top">
+            <div class="campaign-card-name">${name}</div>
+            <div class="campaign-card-actions">
+              <button class="btn-primary btn-sm" onclick="startCampaignByName('${nameAttr}')">▶ Start / Resume</button>
+              <button class="btn-danger btn-sm"  onclick="stopCampaignByName('${nameAttr}')">■ Stop</button>
+              ${failed > 0 ? `<button class="btn-ghost btn-sm" onclick="retryAllFailed('${nameAttr}')">↩ Retry ${failed} Failed</button>` : ''}
+            </div>
+          </div>
+          <div class="progress-bar-wrap"><div class="progress-bar" style="width:${pct}%"></div></div>
+          <div style="font-size:11.5px;color:var(--text-muted);margin:4px 0 8px">${pct}% sent · ${total} total contacts</div>
+          <div class="campaign-stat-chips">
+            <span class="campaign-chip sent">✓ ${sent} sent</span>
+            ${failed > 0 ? `<span class="campaign-chip failed">✗ ${failed} failed</span>` : ''}
+            ${queued > 0 ? `<span class="campaign-chip queued">⏳ ${queued} queued</span>` : ''}
+            <span class="campaign-chip total">${total} total</span>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function startCampaignByName(name) {
+  const result = await jpost('/api/campaigns/start', { campaignName: name });
+  const numbersMsg = result.started?.length
+    ? `Rotating across ${result.started.length} connected number(s).`
+    : 'No connected numbers found — connect a number first.';
+  const queuedMsg = result.queued > 0 ? ` ${result.queued} contact(s) queued.` : ' No new contacts to queue (already sent or opted out).';
+  alert(`▶ "${name}" started.\n${numbersMsg}${queuedMsg}`);
+  refreshCampaigns();
+}
+
+async function stopCampaignByName(name) {
+  await jpost('/api/campaigns/stop', {});
+  alert(`■ All sending stopped (affects all campaigns).`);
+}
+
+async function retryAllFailed(name) {
+  const result = await jpost(`/api/campaigns/${encodeURIComponent(name)}/retry-failed`, {});
+  alert(`↩ ${result.requeued ?? 0} failed contact(s) re-queued for "${name}". Click Start / Resume to send them.`);
+  refreshCampaigns();
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────

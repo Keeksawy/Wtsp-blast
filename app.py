@@ -392,6 +392,44 @@ def stop_route():
     return jsonify({"ok": True})
 
 
+@app.route("/api/campaigns", methods=["GET"])
+def list_campaigns_route():
+    all_contacts = db.get_contacts()
+    all_messages = db.get_messages()
+    outbound = [m for m in all_messages if m.get("direction") == "outbound"]
+
+    campaigns = {}
+    for c in all_contacts:
+        name = c.get("campaignName") or "Unnamed"
+        campaigns.setdefault(name, []).append(c)
+
+    result = []
+    for name, camp_contacts in campaigns.items():
+        cids = {c["contactId"] for c in camp_contacts}
+        camp_out = [m for m in outbound if m.get("contactId") in cids]
+        result.append({
+            "name": name,
+            "totalContacts": len(camp_contacts),
+            "invalidNumbers": len([c for c in camp_contacts if c.get("invalidNumber")]),
+            "messagesSent":   len([m for m in camp_out if m.get("status") == "sent"]),
+            "messagesFailed": len([c for c in camp_contacts if c.get("messageStatus") == "failed"]),
+            "messagesQueued": len([c for c in camp_contacts if c.get("messageStatus") == "queued"]),
+        })
+
+    return jsonify(result)
+
+
+@app.route("/api/campaigns/<name>/retry-failed", methods=["POST"])
+def retry_failed_route(name):
+    contacts = db.get_contacts()
+    count = 0
+    for c in contacts:
+        if c.get("campaignName") == name and c.get("messageStatus") == "failed":
+            db.update_contact(c["contactId"], {"messageStatus": "queued"})
+            count += 1
+    return jsonify({"requeued": count})
+
+
 # ---- templates ----
 @app.route("/api/templates", methods=["GET"])
 def templates_route():
