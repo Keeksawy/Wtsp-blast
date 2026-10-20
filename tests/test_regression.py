@@ -981,3 +981,53 @@ class TestXlsSupport:
             "Watchdog message still contains macOS-specific 'System Settings' text"
         assert "Privacy & Security" not in src, \
             "Watchdog message still contains macOS-specific 'Privacy & Security' text"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 18. Unsupported file type + short rows (v1.0.50)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestFileFormatErrors:
+    """v1.0.50 — unsupported file types give a clear error; short data rows don't crash."""
+
+    def test_unsupported_format_raises_clear_error(self):
+        """Uploading a .xlsb or other unsupported type must raise ValueError with helpful text."""
+        from src.contacts import parse_excel_buffer
+        import pytest
+        fake_bytes = b"garbage bytes that are not xlsx or xls or csv"
+        with pytest.raises(ValueError, match=r"Unsupported file type"):
+            parse_excel_buffer(fake_bytes, filename="contacts.xlsb")
+
+    def test_unsupported_format_via_api(self, client):
+        """The preview endpoint must return a clear error for unsupported file types."""
+        token, _ = _register(client)
+        data = {"file": (io.BytesIO(b"not a real file"), "data.xlsb")}
+        r = client.post("/api/contacts/preview", data=data,
+                        headers=_auth(token), content_type="multipart/form-data")
+        assert r.status_code == 500
+        body = r.get_json()
+        assert "error" in body
+        assert "Unsupported" in body["error"] or "xlsx" in body["error"].lower()
+
+    def test_short_data_rows_do_not_crash(self):
+        """Rows with fewer columns than the header must not raise IndexError."""
+        import openpyxl, io as _io
+        from src.contacts import parse_excel_buffer
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["Owner Name", "Mobile Number", "Unit Number", "Sales Agent Id"])
+        ws.append(["+971501112222"])   # only 1 cell — far fewer than header has
+        ws.append(["Short Row", "+971509998877"])  # 2 cells
+        buf = _io.BytesIO(); wb.save(buf)
+        rows = parse_excel_buffer(buf.getvalue(), filename="test.xlsx")
+        # Should not crash — just return whatever could be parsed
+        assert isinstance(rows, list)
+
+    def test_empty_xlsx_returns_empty_list(self):
+        """An xlsx file with no rows must return an empty list, not crash."""
+        import openpyxl, io as _io
+        from src.contacts import parse_excel_buffer
+        wb = openpyxl.Workbook()
+        buf = _io.BytesIO(); wb.save(buf)
+        rows = parse_excel_buffer(buf.getvalue(), filename="empty.xlsx")
+        assert rows == []

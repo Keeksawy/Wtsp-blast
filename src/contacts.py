@@ -24,7 +24,10 @@ def _map_row(headers, raw_row):
     out = {}
     for field, aliases in COLUMN_ALIASES.items():
         idx = next((i for i, h in enumerate(headers) if _normalize_header(h) in aliases), None)
-        out[field] = str(raw_row[idx]).strip() if idx is not None and raw_row[idx] is not None else ""
+        if idx is not None and idx < len(raw_row) and raw_row[idx] is not None:
+            out[field] = str(raw_row[idx]).strip()
+        else:
+            out[field] = ""
     return out
 
 
@@ -41,6 +44,8 @@ _XLS_MAGIC  = b"\xD0\xCF\x11\xE0"   # OLE2 compound document — .xls
 
 def _parse_rows(all_rows):
     """Shared logic: find header, strip hint rows, map to dicts."""
+    if not all_rows:
+        return []
     header_idx = next(
         (i for i, row in enumerate(all_rows[:10]) if _is_header_row(row)),
         0,
@@ -64,9 +69,21 @@ def parse_excel_buffer(file_bytes, filename=""):
 
     is_xlsx = magic == _XLSX_MAGIC or fname.endswith(".xlsx")
     is_xls  = magic == _XLS_MAGIC  or fname.endswith(".xls")
+    is_csv  = fname.endswith((".csv", ".tsv", ".txt")) or (not fname and not is_xlsx and not is_xls)
+
+    # Extensions that are clearly not text/csv — give a user-friendly error rather
+    # than letting the CSV sniffer produce garbage or a cryptic traceback.
+    _UNSUPPORTED = {".xlsb", ".xlsm", ".ods", ".numbers", ".doc", ".docx", ".pdf", ".odf"}
+    file_ext = ("." + fname.rsplit(".", 1)[-1]) if "." in fname else ""
 
     if is_xlsx:
-        wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+        try:
+            wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+        except Exception:
+            raise ValueError(
+                "Could not read this file as an Excel workbook. "
+                "Please open the file in Excel or Google Sheets and save it again as .xlsx."
+            )
         sheet = wb[wb.sheetnames[0]]
         all_rows = list(sheet.iter_rows(values_only=True))
     elif is_xls:
@@ -74,8 +91,14 @@ def parse_excel_buffer(file_bytes, filename=""):
         wb = xlrd.open_workbook(file_contents=file_bytes)
         sh = wb.sheet_by_index(0)
         all_rows = [tuple(sh.cell_value(r, c) for c in range(sh.ncols)) for r in range(sh.nrows)]
+    elif file_ext in _UNSUPPORTED:
+        raise ValueError(
+            f"Unsupported file type ({file_ext}). "
+            "Please upload your file as .xlsx — open it in Excel or Google Sheets and use "
+            "File → Save As → Excel Workbook (.xlsx)."
+        )
     else:
-        # CSV / TSV — decode with BOM tolerance, auto-detect delimiter
+        # CSV / TSV / no-extension files — decode with BOM tolerance, auto-detect delimiter
         import csv
         text = file_bytes.decode("utf-8-sig", errors="replace")
         dialect = csv.Sniffer().sniff(text[:4096], delimiters=",;\t|") if text.strip() else None
