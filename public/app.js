@@ -615,31 +615,58 @@ async function refreshCampaigns() {
   }
   el.innerHTML = campaigns.map(c => {
     const name    = escHtml(c.name);
-    const total   = c.totalContacts ?? 0;
-    const sent    = c.messagesSent  ?? 0;
+    const total   = c.totalContacts  ?? 0;
+    const sent    = c.messagesSent   ?? 0;
     const failed  = c.messagesFailed ?? 0;
     const queued  = c.messagesQueued ?? 0;
     const pct     = total > 0 ? Math.round((sent / total) * 100) : 0;
     const nameAttr = escHtml(c.name).replace(/'/g, '&#39;');
+
+    const stripeClass = queued > 0 ? 'stripe-active' : (sent >= total && total > 0 ? 'stripe-done' : '');
+    const badgeHtml = queued > 0
+      ? `<span class="campaign-status-badge badge-queued"><span class="badge-dot"></span> In Progress</span>`
+      : (sent >= total && total > 0
+          ? `<span class="campaign-status-badge badge-done">Completed</span>`
+          : '');
+
     return `
       <div class="campaign-card">
-        <div class="campaign-card-stripe"></div>
+        <div class="campaign-card-stripe ${stripeClass}"></div>
         <div class="campaign-card-body">
           <div class="campaign-card-top">
-            <div class="campaign-card-name">${name}</div>
-            <div class="campaign-card-actions">
-              <button class="btn-primary btn-sm" onclick="startCampaignByName('${nameAttr}')">▶ Start / Resume</button>
-              <button class="btn-danger btn-sm"  onclick="stopCampaignByName('${nameAttr}')">■ Stop</button>
-              ${failed > 0 ? `<button class="btn-ghost btn-sm" onclick="retryAllFailed('${nameAttr}')">↩ Retry ${failed} Failed</button>` : ''}
+            <div>
+              <div class="campaign-card-name">${name}</div>
+            </div>
+            ${badgeHtml}
+          </div>
+          <div class="campaign-stats-row">
+            <div class="campaign-stat">
+              <div class="campaign-stat-value color-sent">${sent}</div>
+              <div class="campaign-stat-label">Sent</div>
+            </div>
+            ${failed > 0 ? `<div class="campaign-stat">
+              <div class="campaign-stat-value color-failed">${failed}</div>
+              <div class="campaign-stat-label">Failed</div>
+            </div>` : ''}
+            ${queued > 0 ? `<div class="campaign-stat">
+              <div class="campaign-stat-value color-queued">${queued}</div>
+              <div class="campaign-stat-label">Queued</div>
+            </div>` : ''}
+            <div class="campaign-stat">
+              <div class="campaign-stat-value color-total">${total}</div>
+              <div class="campaign-stat-label">Total</div>
             </div>
           </div>
-          <div class="progress-bar-wrap"><div class="progress-bar" style="width:${pct}%"></div></div>
-          <div style="font-size:11.5px;color:var(--text-muted);margin:4px 0 8px">${pct}% sent · ${total} total contacts</div>
-          <div class="campaign-stat-chips">
-            <span class="campaign-chip sent">✓ ${sent} sent</span>
-            ${failed > 0 ? `<span class="campaign-chip failed">✗ ${failed} failed</span>` : ''}
-            ${queued > 0 ? `<span class="campaign-chip queued">⏳ ${queued} queued</span>` : ''}
-            <span class="campaign-chip total">${total} total</span>
+          <div class="campaign-progress-wrap">
+            <div class="campaign-progress-bar">
+              <div class="campaign-progress-fill" style="width:${pct}%"></div>
+            </div>
+            <div class="campaign-progress-label">${pct}% sent of ${total} contacts</div>
+          </div>
+          <div class="campaign-card-actions">
+            <button class="btn-primary btn-sm" onclick="startCampaignByName('${nameAttr}')">▶ Start / Resume</button>
+            <button class="btn-ghost btn-sm"   onclick="stopCampaignByName('${nameAttr}')">■ Stop</button>
+            ${failed > 0 ? `<button class="btn-warning btn-sm" onclick="retryAllFailed('${nameAttr}')">↩ Retry ${failed} Failed</button>` : ''}
           </div>
         </div>
       </div>`;
